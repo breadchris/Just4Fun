@@ -1,0 +1,6 @@
+11_grip_gestures.patch
+git_Don-t-allow-Send-To-when-there-is-no-mail-client-ava.patch
+0001-Port-to-GMenuModel-and-add-menu-bar.patch
+0002-Don-t-use-gtk_application_set_accels_for_action.patch
+gtk310-secondary-keybindings.patch
+slash_to_search.patch

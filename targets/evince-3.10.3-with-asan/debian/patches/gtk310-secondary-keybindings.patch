@@ -1,0 +1,86 @@
+From 24c0293b4d520193553d99f1423b9e0394eec0ef Mon Sep 17 00:00:00 2001
+From: Lars Uebernickel <lars.uebernickel@canonical.com>
+Date: Tue, 11 Mar 2014 17:00:02 +0100
+Subject: [PATCH] Add secondary (and tertiary) keybindings
+
+gtk_application_add_accelerator() can only add one accel per action.
+Duplicate the actions so that we can add multiple accels. This is very
+gross, but only needed until we update to gtk 3.12, which introduces a
+new function that can handle setting multiple accels for a single
+action.
+---
+ shell/ev-application.c | 10 ++++++++++
+ shell/ev-window.c      | 10 ++++++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/shell/ev-application.c b/shell/ev-application.c
+index 4493b1e..65064b1 100644
+--- a/shell/ev-application.c
++++ b/shell/ev-application.c
+@@ -1093,6 +1093,7 @@ ev_application_startup (GApplication *gapplication)
+           "win.save-copy",              "<Ctrl>S", NULL,
+           "win.print",                  "<Ctrl>P", NULL,
+           "win.copy",                   "<Ctrl>C", "<Ctrl>Insert", NULL,
++          "win.copy2",                  "<Ctrl>Insert", NULL,
+           "win.select-all",             "<Ctrl>A", NULL,
+           "win.save-settings",          "<Ctrl>T", NULL,
+           "win.go-first-page",          "<Ctrl>Home", NULL,
+@@ -1107,13 +1108,22 @@ ev_application_startup (GApplication *gapplication)
+           "win.go-backward",            "<Shift>Page_Up", NULL,
+           "win.go-forward",             "<Shift>Page_Down", NULL,
+           "win.go-next-page",           "<Ctrl>Page_Down", "n", NULL,
++          "win.go-next-page2",          "n", NULL,
+           "win.go-previous-page",       "<Ctrl>Page_Up", "p", NULL,
++          "win.go-previous-page2",      "p", NULL,
+           "win.sizing-mode::fit-page",  "f", NULL,
+           "win.sizing-mode::fit-width", "w", NULL,
+           "win.open-menu",              "F10", NULL,
+           "win.caret-navigation",       "F7", NULL,
+           "win.zoom-in",                "plus", "<Ctrl>plus", "KP_Add", "<Ctrl>KP_Add", "equal", NULL,
++          "win.zoom-in2",               "<Ctrl>plus", "KP_Add", "<Ctrl>KP_Add", NULL,
++          "win.zoom-in3",               "KP_Add", "<Ctrl>KP_Add", NULL,
++          "win.zoom-in4",               "<Ctrl>KP_Add", NULL,
++          "win.zoom-in5",               "equal", NULL,
+           "win.zoom-out",               "minus", "<Ctrl>minus", "KP_Subtract", "<Ctrl>KP_Subtract", NULL,
++          "win.zoom-out2",              "<Ctrl>minus", "KP_Subtract", "<Ctrl>KP_Subtract", NULL,
++          "win.zoom-out3",              "KP_Subtract", "<Ctrl>KP_Subtract", NULL,
++          "win.zoom-out4",              "<Ctrl>KP_Subtract", NULL,
+           "win.show-side-pane",         "F9", NULL,
+           "win.fullscreen",             "F11", NULL,
+           "win.presentation",           "F5", NULL,
+diff --git a/shell/ev-window.c b/shell/ev-window.c
+index fc2258e..9f685fa 100644
+--- a/shell/ev-window.c
++++ b/shell/ev-window.c
+@@ -6658,10 +6658,13 @@ ev_window_init (EvWindow *ev_window)
+ 		{ "print", ev_window_activate_print_action, NULL, NULL, NULL },
+ 		{ "show-properties", ev_window_activate_show_properties_action, NULL, NULL, NULL },
+ 		{ "copy", ev_window_activate_copy_action, NULL, NULL, NULL },
++		{ "copy2", ev_window_activate_copy_action, NULL, NULL, NULL },
+ 		{ "select-all", ev_window_activate_select_all_action, NULL, NULL, NULL },
+ 		{ "save-settings", ev_window_activate_save_settings_action, NULL, NULL, NULL },
+ 		{ "go-previous-page", ev_window_activate_go_previous_page_action, NULL, NULL, NULL },
++		{ "go-previous-page2", ev_window_activate_go_previous_page_action, NULL, NULL, NULL },
+ 		{ "go-next-page", ev_window_activate_go_next_page_action, NULL, NULL, NULL },
++		{ "go-next-page2", ev_window_activate_go_next_page_action, NULL, NULL, NULL },
+ 		{ "go-first-page", ev_window_activate_go_first_page_action, NULL, NULL, NULL },
+ 		{ "go-last-page", ev_window_activate_go_last_page_action, NULL, NULL, NULL },
+ 		{ "go-forward", ev_window_activate_go_forward_action, NULL, NULL, NULL },
+@@ -6680,7 +6683,14 @@ ev_window_init (EvWindow *ev_window)
+ 		{ "rotate-left", ev_window_activate_rotate_left_action, NULL, NULL, NULL },
+ 		{ "rotate-right", ev_window_activate_rotate_right_action, NULL, NULL, NULL },
+ 		{ "zoom-in", ev_window_activate_zoom_in_action, NULL, NULL, NULL },
++		{ "zoom-in2", ev_window_activate_zoom_in_action, NULL, NULL, NULL },
++		{ "zoom-in3", ev_window_activate_zoom_in_action, NULL, NULL, NULL },
++		{ "zoom-in4", ev_window_activate_zoom_in_action, NULL, NULL, NULL },
++		{ "zoom-in5", ev_window_activate_zoom_in_action, NULL, NULL, NULL },
+ 		{ "zoom-out", ev_window_activate_zoom_out_action, NULL, NULL, NULL },
++		{ "zoom-out2", ev_window_activate_zoom_out_action, NULL, NULL, NULL },
++		{ "zoom-out3", ev_window_activate_zoom_out_action, NULL, NULL, NULL },
++		{ "zoom-out4", ev_window_activate_zoom_out_action, NULL, NULL, NULL },
+ 		{ "reload", ev_window_activate_reload_action, NULL, NULL, NULL },
+ 		{ "auto-scroll", ev_window_activate_auto_scroll_action, NULL, NULL, NULL },
+ 		{ "add-bookmark", ev_window_activate_add_bookmark_action, NULL, NULL, NULL },
+-- 
+1.9.1
+

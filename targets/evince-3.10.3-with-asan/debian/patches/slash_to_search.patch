@@ -1,0 +1,24 @@
+Index: evince-3.10.3/shell/ev-application.c
+===================================================================
+--- evince-3.10.3.orig/shell/ev-application.c
++++ evince-3.10.3/shell/ev-application.c
+@@ -1119,6 +1119,7 @@ ev_application_startup (GApplication *ga
+           "win.close",                  "<Ctrl>W", NULL,
+           "win.escape",                 "Escape", NULL,
+           "win.find",                   "<Ctrl>F", "slash", NULL,
++          "win.find2",                  "slash", NULL,
+           "win.find-next",              "<Ctrl>G", NULL,
+           "win.find-previous",          "<Ctrl><Shift>G", NULL,
+           "win.select-page",            "<Ctrl>L", NULL,
+Index: evince-3.10.3/shell/ev-window.c
+===================================================================
+--- evince-3.10.3.orig/shell/ev-window.c
++++ evince-3.10.3/shell/ev-window.c
+@@ -6675,6 +6675,7 @@ ev_window_init (EvWindow *ev_window)
+ 		{ "go-forward", ev_window_activate_go_forward_action, NULL, NULL, NULL },
+ 		{ "go-backwards", ev_window_activate_go_backward_action, NULL, NULL, NULL },
+ 		{ "find", activate_toggle_action, NULL, "false", ev_window_change_find_action_state },
++		{ "find2", activate_toggle_action, NULL, "false", ev_window_change_find_action_state },
+ 		{ "find-next", ev_window_activate_find_next_action, NULL, NULL, NULL },
+ 		{ "find-previous", ev_window_activate_find_previous_action, NULL, NULL, NULL },
+ 		{ "select-page", ev_window_activate_select_page_action, NULL, NULL, NULL },

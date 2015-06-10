@@ -1,0 +1,188 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Evince Document Library Reference Manual: EvDocumentFind</title>
+<meta name="generator" content="DocBook XSL Stylesheets V1.78.1">
+<link rel="home" href="index.html" title="Evince Document Library Reference Manual">
+<link rel="up" href="document-interfaces.html" title="Part I. Document Interfaces">
+<link rel="prev" href="EvDocumentAttachments.html" title="EvDocumentAttachments">
+<link rel="next" href="EvDocumentFonts.html" title="EvDocumentFonts">
+<meta name="generator" content="GTK-Doc V1.19.1 (XML mode)">
+<link rel="stylesheet" href="style.css" type="text/css">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<table class="navigation" id="top" width="100%" summary="Navigation header" cellpadding="2" cellspacing="10"><tr valign="middle">
+<td width="100%" align="left">
+<a href="#" class="shortcut">Top</a>
+                   | 
+                  <a href="#EvDocumentFind.description" class="shortcut">Description</a>
+                   | 
+                  <a href="#EvDocumentFind.object-hierarchy" class="shortcut">Object Hierarchy</a>
+</td>
+<td><a accesskey="h" href="index.html"><img src="home.png" width="16" height="16" border="0" alt="Home"></a></td>
+<td><a accesskey="u" href="document-interfaces.html"><img src="up.png" width="16" height="16" border="0" alt="Up"></a></td>
+<td><a accesskey="p" href="EvDocumentAttachments.html"><img src="left.png" width="16" height="16" border="0" alt="Prev"></a></td>
+<td><a accesskey="n" href="EvDocumentFonts.html"><img src="right.png" width="16" height="16" border="0" alt="Next"></a></td>
+</tr></table>
+<div class="refentry">
+<a name="EvDocumentFind"></a><div class="titlepage"></div>
+<div class="refnamediv"><table width="100%"><tr>
+<td valign="top">
+<h2><span class="refentrytitle"><a name="EvDocumentFind.top_of_page"></a>EvDocumentFind</span></h2>
+<p>EvDocumentFind</p>
+</td>
+<td valign="top" align="right"></td>
+</tr></table></div>
+<div class="refsynopsisdiv">
+<a name="EvDocumentFind.synopsis"></a><h2>Synopsis</h2>
+<a name="EvFindOptions"></a><pre class="synopsis">                    <a class="link" href="EvDocumentFind.html#EvDocumentFind-struct" title="EvDocumentFind">EvDocumentFind</a>;
+struct              <a class="link" href="EvDocumentFind.html#EvDocumentFindInterface" title="struct EvDocumentFindInterface">EvDocumentFindInterface</a>;
+enum                <a class="link" href="EvDocumentFind.html#EvFindOptions-enum" title="enum EvFindOptions">EvFindOptions</a>;
+<span class="returnvalue">GList</span> *             <a class="link" href="EvDocumentFind.html#ev-document-find-find-text" title="ev_document_find_find_text ()">ev_document_find_find_text</a>          (<em class="parameter"><code><a class="link" href="EvDocumentFind.html" title="EvDocumentFind"><span class="type">EvDocumentFind</span></a> *document_find</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvPage.html" title="EvPage"><span class="type">EvPage</span></a> *page</code></em>,
+                                                         <em class="parameter"><code>const <span class="type">gchar</span> *text</code></em>,
+                                                         <em class="parameter"><code><span class="type">gboolean</span> case_sensitive</code></em>);
+<span class="returnvalue">GList</span> *             <a class="link" href="EvDocumentFind.html#ev-document-find-find-text-with-options" title="ev_document_find_find_text_with_options ()">ev_document_find_find_text_with_options</a>
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentFind.html" title="EvDocumentFind"><span class="type">EvDocumentFind</span></a> *document_find</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvPage.html" title="EvPage"><span class="type">EvPage</span></a> *page</code></em>,
+                                                         <em class="parameter"><code>const <span class="type">gchar</span> *text</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvDocumentFind.html#EvFindOptions"><span class="type">EvFindOptions</span></a> options</code></em>);
+<a class="link" href="EvDocumentFind.html#EvFindOptions"><span class="returnvalue">EvFindOptions</span></a>       <a class="link" href="EvDocumentFind.html#ev-document-find-get-supported-options" title="ev_document_find_get_supported_options ()">ev_document_find_get_supported_options</a>
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentFind.html" title="EvDocumentFind"><span class="type">EvDocumentFind</span></a> *document_find</code></em>);
+</pre>
+</div>
+<div class="refsect1">
+<a name="EvDocumentFind.object-hierarchy"></a><h2>Object Hierarchy</h2>
+<pre class="synopsis">
+  GInterface
+   +----EvDocumentFind
+</pre>
+<pre class="synopsis">
+  GFlags
+   +----EvFindOptions
+</pre>
+</div>
+<div class="refsect1">
+<a name="EvDocumentFind.description"></a><h2>Description</h2>
+<p>
+</p>
+</div>
+<div class="refsect1">
+<a name="EvDocumentFind.details"></a><h2>Details</h2>
+<div class="refsect2">
+<a name="EvDocumentFind-struct"></a><h3>EvDocumentFind</h3>
+<pre class="programlisting">typedef struct _EvDocumentFind EvDocumentFind;</pre>
+<p>
+</p>
+</div>
+<hr>
+<div class="refsect2">
+<a name="EvDocumentFindInterface"></a><h3>struct EvDocumentFindInterface</h3>
+<pre class="programlisting">struct EvDocumentFindInterface {
+	GTypeInterface base_iface;
+
+        /* Methods */
+	GList 	     *(* find_text)              (EvDocumentFind *document_find,
+						  EvPage         *page,
+						  const gchar    *text,
+						  gboolean        case_sensitive);
+	GList        *(* find_text_with_options) (EvDocumentFind *document_find,
+						  EvPage         *page,
+						  const gchar    *text,
+						  EvFindOptions   options);
+	EvFindOptions (*get_supported_options)   (EvDocumentFind *document_find);
+};
+</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="EvFindOptions-enum"></a><h3>enum EvFindOptions</h3>
+<pre class="programlisting">typedef enum {
+	EV_FIND_DEFAULT          = 0,
+	EV_FIND_CASE_SENSITIVE   = 1 &lt;&lt; 0,
+	EV_FIND_WHOLE_WORDS_ONLY = 1 &lt;&lt; 1
+} EvFindOptions;
+</pre>
+<div class="variablelist"><table border="0" class="variablelist">
+<colgroup>
+<col align="left" valign="top">
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td><p><a name="EV-FIND-DEFAULT:CAPS"></a><span class="term"><code class="literal">EV_FIND_DEFAULT</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-FIND-CASE-SENSITIVE:CAPS"></a><span class="term"><code class="literal">EV_FIND_CASE_SENSITIVE</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-FIND-WHOLE-WORDS-ONLY:CAPS"></a><span class="term"><code class="literal">EV_FIND_WHOLE_WORDS_ONLY</code></span></p></td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-find-find-text"></a><h3>ev_document_find_find_text ()</h3>
+<pre class="programlisting"><span class="returnvalue">GList</span> *             ev_document_find_find_text          (<em class="parameter"><code><a class="link" href="EvDocumentFind.html" title="EvDocumentFind"><span class="type">EvDocumentFind</span></a> *document_find</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvPage.html" title="EvPage"><span class="type">EvPage</span></a> *page</code></em>,
+                                                         <em class="parameter"><code>const <span class="type">gchar</span> *text</code></em>,
+                                                         <em class="parameter"><code><span class="type">gboolean</span> case_sensitive</code></em>);</pre>
+<div class="variablelist"><table border="0" class="variablelist">
+<colgroup>
+<col align="left" valign="top">
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>document_find</code></em> :</span></p></td>
+<td>an <a class="link" href="EvDocumentFind.html" title="EvDocumentFind"><span class="type">EvDocumentFind</span></a>
+</td>
+</tr>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>page</code></em> :</span></p></td>
+<td>an <a class="link" href="EvPage.html" title="EvPage"><span class="type">EvPage</span></a>
+</td>
+</tr>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>text</code></em> :</span></p></td>
+<td>text to find</td>
+</tr>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>case_sensitive</code></em> :</span></p></td>
+<td>whether to match the string case</td>
+</tr>
+<tr>
+<td><p><span class="term"><span class="emphasis"><em>Returns</em></span> :</span></p></td>
+<td>a list of results. <span class="annotation">[<acronym title="Free data after the code is done."><span class="acronym">transfer full</span></acronym>][<acronym title="Generics and defining elements of containers and arrays."><span class="acronym">element-type</span></acronym> EvRectangle]</span>
+</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-find-find-text-with-options"></a><h3>ev_document_find_find_text_with_options ()</h3>
+<pre class="programlisting"><span class="returnvalue">GList</span> *             ev_document_find_find_text_with_options
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentFind.html" title="EvDocumentFind"><span class="type">EvDocumentFind</span></a> *document_find</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvPage.html" title="EvPage"><span class="type">EvPage</span></a> *page</code></em>,
+                                                         <em class="parameter"><code>const <span class="type">gchar</span> *text</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvDocumentFind.html#EvFindOptions"><span class="type">EvFindOptions</span></a> options</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-find-get-supported-options"></a><h3>ev_document_find_get_supported_options ()</h3>
+<pre class="programlisting"><a class="link" href="EvDocumentFind.html#EvFindOptions"><span class="returnvalue">EvFindOptions</span></a>       ev_document_find_get_supported_options
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentFind.html" title="EvDocumentFind"><span class="type">EvDocumentFind</span></a> *document_find</code></em>);</pre>
+</div>
+</div>
+</div>
+<div class="footer">
+<hr>
+          Generated by GTK-Doc V1.19.1</div>
+</body>
+</html>

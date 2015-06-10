@@ -1,0 +1,113 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Evince View Library Reference Manual: ev-view-cursor</title>
+<meta name="generator" content="DocBook XSL Stylesheets V1.78.1">
+<link rel="home" href="index.html" title="Evince View Library Reference Manual">
+<link rel="up" href="view-view.html" title="Part I. Evince View">
+<link rel="prev" href="libevview-ev-job-scheduler.html" title="ev-job-scheduler">
+<link rel="next" href="object-tree.html" title="Object Hierarchy">
+<meta name="generator" content="GTK-Doc V1.19.1 (XML mode)">
+<link rel="stylesheet" href="style.css" type="text/css">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<table class="navigation" id="top" width="100%" summary="Navigation header" cellpadding="2" cellspacing="10"><tr valign="middle">
+<td width="100%" align="left">
+<a href="#" class="shortcut">Top</a>
+                   | 
+                  <a href="#libevview-ev-view-cursor.description" class="shortcut">Description</a>
+</td>
+<td><a accesskey="h" href="index.html"><img src="home.png" width="16" height="16" border="0" alt="Home"></a></td>
+<td><a accesskey="u" href="view-view.html"><img src="up.png" width="16" height="16" border="0" alt="Up"></a></td>
+<td><a accesskey="p" href="libevview-ev-job-scheduler.html"><img src="left.png" width="16" height="16" border="0" alt="Prev"></a></td>
+<td><a accesskey="n" href="object-tree.html"><img src="right.png" width="16" height="16" border="0" alt="Next"></a></td>
+</tr></table>
+<div class="refentry">
+<a name="libevview-ev-view-cursor"></a><div class="titlepage"></div>
+<div class="refnamediv"><table width="100%"><tr>
+<td valign="top">
+<h2><span class="refentrytitle"><a name="libevview-ev-view-cursor.top_of_page"></a>ev-view-cursor</span></h2>
+<p>ev-view-cursor</p>
+</td>
+<td valign="top" align="right"></td>
+</tr></table></div>
+<div class="refsynopsisdiv">
+<a name="libevview-ev-view-cursor.synopsis"></a><h2>Synopsis</h2>
+<pre class="synopsis">enum                <a class="link" href="libevview-ev-view-cursor.html#EvViewCursor" title="enum EvViewCursor">EvViewCursor</a>;
+<span class="returnvalue">GdkCursor</span> *         <a class="link" href="libevview-ev-view-cursor.html#ev-view-cursor-new" title="ev_view_cursor_new ()">ev_view_cursor_new</a>                  (<em class="parameter"><code><span class="type">GdkDisplay</span> *display</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="libevview-ev-view-cursor.html#EvViewCursor" title="enum EvViewCursor"><span class="type">EvViewCursor</span></a> cursor</code></em>);
+</pre>
+</div>
+<div class="refsect1">
+<a name="libevview-ev-view-cursor.description"></a><h2>Description</h2>
+</div>
+<div class="refsect1">
+<a name="libevview-ev-view-cursor.details"></a><h2>Details</h2>
+<div class="refsect2">
+<a name="EvViewCursor"></a><h3>enum EvViewCursor</h3>
+<pre class="programlisting">typedef enum {
+	EV_VIEW_CURSOR_NORMAL,
+	EV_VIEW_CURSOR_IBEAM,
+	EV_VIEW_CURSOR_LINK,
+	EV_VIEW_CURSOR_WAIT,
+	EV_VIEW_CURSOR_HIDDEN,
+	EV_VIEW_CURSOR_DRAG,
+	EV_VIEW_CURSOR_AUTOSCROLL,
+	EV_VIEW_CURSOR_ADD
+} EvViewCursor;
+</pre>
+<div class="variablelist"><table border="0" class="variablelist">
+<colgroup>
+<col align="left" valign="top">
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td><p><a name="EV-VIEW-CURSOR-NORMAL:CAPS"></a><span class="term"><code class="literal">EV_VIEW_CURSOR_NORMAL</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-VIEW-CURSOR-IBEAM:CAPS"></a><span class="term"><code class="literal">EV_VIEW_CURSOR_IBEAM</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-VIEW-CURSOR-LINK:CAPS"></a><span class="term"><code class="literal">EV_VIEW_CURSOR_LINK</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-VIEW-CURSOR-WAIT:CAPS"></a><span class="term"><code class="literal">EV_VIEW_CURSOR_WAIT</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-VIEW-CURSOR-HIDDEN:CAPS"></a><span class="term"><code class="literal">EV_VIEW_CURSOR_HIDDEN</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-VIEW-CURSOR-DRAG:CAPS"></a><span class="term"><code class="literal">EV_VIEW_CURSOR_DRAG</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-VIEW-CURSOR-AUTOSCROLL:CAPS"></a><span class="term"><code class="literal">EV_VIEW_CURSOR_AUTOSCROLL</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-VIEW-CURSOR-ADD:CAPS"></a><span class="term"><code class="literal">EV_VIEW_CURSOR_ADD</code></span></p></td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-view-cursor-new"></a><h3>ev_view_cursor_new ()</h3>
+<pre class="programlisting"><span class="returnvalue">GdkCursor</span> *         ev_view_cursor_new                  (<em class="parameter"><code><span class="type">GdkDisplay</span> *display</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="libevview-ev-view-cursor.html#EvViewCursor" title="enum EvViewCursor"><span class="type">EvViewCursor</span></a> cursor</code></em>);</pre>
+</div>
+</div>
+</div>
+<div class="footer">
+<hr>
+          Generated by GTK-Doc V1.19.1</div>
+</body>
+</html>

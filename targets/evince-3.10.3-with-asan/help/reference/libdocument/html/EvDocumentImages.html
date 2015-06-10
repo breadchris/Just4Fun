@@ -1,0 +1,126 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Evince Document Library Reference Manual: EvDocumentImages</title>
+<meta name="generator" content="DocBook XSL Stylesheets V1.78.1">
+<link rel="home" href="index.html" title="Evince Document Library Reference Manual">
+<link rel="up" href="document-interfaces.html" title="Part I. Document Interfaces">
+<link rel="prev" href="EvDocumentForms.html" title="EvDocumentForms">
+<link rel="next" href="EvDocumentInfo.html" title="ev-document-info">
+<meta name="generator" content="GTK-Doc V1.19.1 (XML mode)">
+<link rel="stylesheet" href="style.css" type="text/css">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<table class="navigation" id="top" width="100%" summary="Navigation header" cellpadding="2" cellspacing="10"><tr valign="middle">
+<td width="100%" align="left">
+<a href="#" class="shortcut">Top</a>
+                   | 
+                  <a href="#EvDocumentImages.description" class="shortcut">Description</a>
+                   | 
+                  <a href="#EvDocumentImages.object-hierarchy" class="shortcut">Object Hierarchy</a>
+</td>
+<td><a accesskey="h" href="index.html"><img src="home.png" width="16" height="16" border="0" alt="Home"></a></td>
+<td><a accesskey="u" href="document-interfaces.html"><img src="up.png" width="16" height="16" border="0" alt="Up"></a></td>
+<td><a accesskey="p" href="EvDocumentForms.html"><img src="left.png" width="16" height="16" border="0" alt="Prev"></a></td>
+<td><a accesskey="n" href="EvDocumentInfo.html"><img src="right.png" width="16" height="16" border="0" alt="Next"></a></td>
+</tr></table>
+<div class="refentry">
+<a name="EvDocumentImages"></a><div class="titlepage"></div>
+<div class="refnamediv"><table width="100%"><tr>
+<td valign="top">
+<h2><span class="refentrytitle"><a name="EvDocumentImages.top_of_page"></a>EvDocumentImages</span></h2>
+<p>EvDocumentImages</p>
+</td>
+<td valign="top" align="right"></td>
+</tr></table></div>
+<div class="refsynopsisdiv">
+<a name="EvDocumentImages.synopsis"></a><h2>Synopsis</h2>
+<pre class="synopsis">                    <a class="link" href="EvDocumentImages.html#EvDocumentImages-struct" title="EvDocumentImages">EvDocumentImages</a>;
+struct              <a class="link" href="EvDocumentImages.html#EvDocumentImagesInterface" title="struct EvDocumentImagesInterface">EvDocumentImagesInterface</a>;
+<a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="returnvalue">EvMappingList</span></a> *     <a class="link" href="EvDocumentImages.html#ev-document-images-get-image-mapping" title="ev_document_images_get_image_mapping ()">ev_document_images_get_image_mapping</a>
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentImages.html" title="EvDocumentImages"><span class="type">EvDocumentImages</span></a> *document_images</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvPage.html" title="EvPage"><span class="type">EvPage</span></a> *page</code></em>);
+<span class="returnvalue">GdkPixbuf</span> *         <a class="link" href="EvDocumentImages.html#ev-document-images-get-image" title="ev_document_images_get_image ()">ev_document_images_get_image</a>        (<em class="parameter"><code><a class="link" href="EvDocumentImages.html" title="EvDocumentImages"><span class="type">EvDocumentImages</span></a> *document_images</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvImage.html" title="EvImage"><span class="type">EvImage</span></a> *image</code></em>);
+</pre>
+</div>
+<div class="refsect1">
+<a name="EvDocumentImages.object-hierarchy"></a><h2>Object Hierarchy</h2>
+<pre class="synopsis">
+  GInterface
+   +----EvDocumentImages
+</pre>
+</div>
+<div class="refsect1">
+<a name="EvDocumentImages.description"></a><h2>Description</h2>
+<p>
+</p>
+</div>
+<div class="refsect1">
+<a name="EvDocumentImages.details"></a><h2>Details</h2>
+<div class="refsect2">
+<a name="EvDocumentImages-struct"></a><h3>EvDocumentImages</h3>
+<pre class="programlisting">typedef struct _EvDocumentImages EvDocumentImages;</pre>
+<p>
+</p>
+</div>
+<hr>
+<div class="refsect2">
+<a name="EvDocumentImagesInterface"></a><h3>struct EvDocumentImagesInterface</h3>
+<pre class="programlisting">struct EvDocumentImagesInterface {
+        GTypeInterface base_iface;
+
+        /* Methods  */
+        EvMappingList *(* get_image_mapping) (EvDocumentImages *document_images,
+					      EvPage           *page);
+	GdkPixbuf     *(* get_image)         (EvDocumentImages *document_images,
+					      EvImage          *image);
+};
+</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-images-get-image-mapping"></a><h3>ev_document_images_get_image_mapping ()</h3>
+<pre class="programlisting"><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="returnvalue">EvMappingList</span></a> *     ev_document_images_get_image_mapping
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentImages.html" title="EvDocumentImages"><span class="type">EvDocumentImages</span></a> *document_images</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvPage.html" title="EvPage"><span class="type">EvPage</span></a> *page</code></em>);</pre>
+<p>
+</p>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-images-get-image"></a><h3>ev_document_images_get_image ()</h3>
+<pre class="programlisting"><span class="returnvalue">GdkPixbuf</span> *         ev_document_images_get_image        (<em class="parameter"><code><a class="link" href="EvDocumentImages.html" title="EvDocumentImages"><span class="type">EvDocumentImages</span></a> *document_images</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvImage.html" title="EvImage"><span class="type">EvImage</span></a> *image</code></em>);</pre>
+<div class="variablelist"><table border="0" class="variablelist">
+<colgroup>
+<col align="left" valign="top">
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>document_images</code></em> :</span></p></td>
+<td>an <a class="link" href="EvDocumentImages.html" title="EvDocumentImages"><span class="type">EvDocumentImages</span></a>
+</td>
+</tr>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>image</code></em> :</span></p></td>
+<td>an <a class="link" href="EvImage.html" title="EvImage"><span class="type">EvImage</span></a>
+</td>
+</tr>
+<tr>
+<td><p><span class="term"><span class="emphasis"><em>Returns</em></span> :</span></p></td>
+<td>a <span class="type">GdkPixbuf</span>. <span class="annotation">[<acronym title="Free data after the code is done."><span class="acronym">transfer full</span></acronym>]</span>
+</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+</div>
+</div>
+<div class="footer">
+<hr>
+          Generated by GTK-Doc V1.19.1</div>
+</body>
+</html>

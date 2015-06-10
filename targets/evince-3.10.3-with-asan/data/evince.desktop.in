@@ -1,0 +1,17 @@
+[Desktop Entry]
+_Name=Document Viewer
+_Comment=View multi-page documents
+_Keywords=pdf;ps;postscript;dvi;xps;djvu;tiff;document;presentation;
+TryExec=evince
+Exec=evince %U
+StartupNotify=true
+Terminal=false
+Type=Application
+Icon=evince
+X-GNOME-DocPath=
+X-GNOME-Bugzilla-Bugzilla=GNOME
+X-GNOME-Bugzilla-Product=evince
+X-GNOME-Bugzilla-Component=BugBuddyBugs
+X-GNOME-Bugzilla-Version=3.10.3
+Categories=GNOME;GTK;Office;Viewer;Graphics;2DGraphics;VectorGraphics;
+MimeType=application/pdf;application/x-bzpdf;application/x-gzpdf;application/x-xzpdf;application/postscript;application/x-bzpostscript;application/x-gzpostscript;image/x-eps;image/x-bzeps;image/x-gzeps;image/vnd.djvu;application/x-cbr;application/x-cbz;application/x-cb7;application/x-cbt;

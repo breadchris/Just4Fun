@@ -1,0 +1,4679 @@
+From 2e12bde40c4b9b4433caea9015bd63df3907dad2 Mon Sep 17 00:00:00 2001
+From: Lars Uebernickel <lars.uebernickel@canonical.com>
+Date: Thu, 30 Jan 2014 15:13:13 +0100
+Subject: [PATCH 1/2] Port to GMenuModel and add menu bar
+
+---
+ shell/Makefile.am            |    7 +-
+ shell/ev-application.c       |  325 ++++++++-
+ shell/ev-application.h       |    8 +
+ shell/ev-bookmarks.c         |    8 +
+ shell/ev-bookmarks.h         |    1 +
+ shell/ev-recent-menu-model.c |  108 +++
+ shell/ev-recent-menu-model.h |   30 +
+ shell/ev-sidebar-bookmarks.c |   32 +-
+ shell/ev-toolbar.c           |  164 +++--
+ shell/ev-utils.c             |   89 +++
+ shell/ev-utils.h             |    7 +
+ shell/ev-window.c            | 1498 +++++++++++++-----------------------------
+ shell/ev-window.h            |    2 +-
+ shell/evince-appmenu.ui      |   10 +
+ shell/evince-ui.xml          |   88 ---
+ shell/evince.gresource.xml   |    3 +-
+ shell/menus.ui               |  188 ++++++
+ shell/traditional-menus.ui   |  229 +++++++
+ 18 files changed, 1591 insertions(+), 1206 deletions(-)
+ create mode 100644 shell/ev-recent-menu-model.c
+ create mode 100644 shell/ev-recent-menu-model.h
+ create mode 100644 shell/menus.ui
+ create mode 100644 shell/traditional-menus.ui
+
+Index: evince-3.10.3/shell/Makefile.am
+===================================================================
+--- evince-3.10.3.orig/shell/Makefile.am	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/Makefile.am	2014-04-28 15:33:25.022869346 +0200
+@@ -75,6 +75,8 @@
+ 	ev-sidebar-page.h		\
+ 	ev-sidebar-thumbnails.c		\
+ 	ev-sidebar-thumbnails.h		\
++	ev-recent-menu-model.c		\
++	ev-recent-menu-model.h		\
+ 	main.c
+ 
+ nodist_evince_SOURCES = \
+@@ -172,12 +174,13 @@
+ 
+ EXTRA_DIST = \
+ 	evince.css \
+-	evince-appmenu.ui \
+ 	evince-icon.rc \
+ 	evince-ui.xml \
+ 	evince.gresource.xml \
+ 	ev-gdbus.xml \
+-	ev-daemon-gdbus.xml
++	ev-daemon-gdbus.xml \
++	menus.ui \
++	traditional-menus.ui
+ 
+ ev-resources.c: evince.gresource.xml Makefile $(shell $(GLIB_COMPILE_RESOURCES) --generate-dependencies --sourcedir $(srcdir) $(srcdir)/evince.gresource.xml)
+ 	$(AM_V_GEN) XMLLINT=$(XMLLINT) $(GLIB_COMPILE_RESOURCES) --target $@ --sourcedir $(srcdir) --generate-source --c-name ev $<
+Index: evince-3.10.3/shell/ev-application.c
+===================================================================
+--- evince-3.10.3.orig/shell/ev-application.c	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-application.c	2014-04-28 15:33:30.000000000 +0200
+@@ -42,6 +42,9 @@
+ #include "ev-application.h"
+ #include "ev-file-helpers.h"
+ #include "ev-stock-icons.h"
++#include "ev-utils.h"
++#include "ev-document-factory.h"
++#include "ev-recent-menu-model.h"
+ 
+ #ifdef ENABLE_DBUS
+ #include "ev-gdbus-generated.h"
+@@ -54,6 +57,8 @@
+ 	gchar *uri;
+ 
+ 	gchar *dot_dir;
++	GSettings *settings;
++	GMenu *bookmarks_menu;
+ 
+ #ifdef ENABLE_DBUS
+         EvEvinceApplication *skeleton;
+@@ -1028,15 +1033,118 @@
+ }
+ 
+ static void
++app_about_cb (GSimpleAction *action,
++              GVariant      *parameter,
++              gpointer       user_data)
++{
++        EvApplication *application = user_data;
++
++        ev_application_show_about (application);
++}
++
++static void
++app_open_cb (GSimpleAction *action,
++              GVariant      *parameter,
++              gpointer       user_data)
++{
++        EvApplication *application = user_data;
++
++        ev_application_open (application);
++}
++
++static void
++app_open_file_cb (GSimpleAction *action,
++                  GVariant      *parameter,
++                  gpointer       user_data)
++{
++        EvApplication *application = user_data;
++
++        ev_application_open_uri_at_dest (application, g_variant_get_string (parameter, NULL),
++                                         gdk_screen_get_default (), NULL, 0, NULL,
++                                         GDK_CURRENT_TIME);
++}
++
++static void
++ev_application_dispose (GObject *object)
++{
++	EvApplication *app = EV_APPLICATION (object);
++
++	g_clear_object (&app->settings);
++
++	G_OBJECT_CLASS (ev_application_parent_class)->dispose (object);
++}
++
++static void
++ev_application_update_bookmarks_menu (EvApplication *application)
++{
++        GtkWindow *window;
++
++        /* The bookmarks menu has two sections: the first one contains
++         * the "Add Bookmark" menu item and the second one is filled
++         * with the active window's bookmarks.
++         */
++
++        if (g_menu_model_get_n_items (G_MENU_MODEL (application->bookmarks_menu)) == 2)
++                g_menu_remove (application->bookmarks_menu, 1);
++
++        window = gtk_application_get_active_window (GTK_APPLICATION (application));
++        if (window) {
++                g_menu_append_section (application->bookmarks_menu, NULL,
++                                       ev_window_get_bookmarks_menu (EV_WINDOW (window)));
++        }
++}
++
++static void
+ ev_application_startup (GApplication *gapplication)
+ {
+         const GActionEntry app_menu_actions[] = {
++                { "open", app_open_cb, NULL, NULL, NULL },
++                { "open-file", app_open_file_cb, "s", NULL, NULL },
++                { "about", app_about_cb, NULL, NULL, NULL },
+                 { "help", app_help_cb, NULL, NULL, NULL },
+         };
+ 
++        const gchar *action_accels[] = {
++          "app.open",                   "<Ctrl>O", NULL,
++          "win.open-copy",              "<Ctrl>N", NULL,
++          "win.save-copy",              "<Ctrl>S", NULL,
++          "win.print",                  "<Ctrl>P", NULL,
++          "win.copy",                   "<Ctrl>C", "<Ctrl>Insert", NULL,
++          "win.select-all",             "<Ctrl>A", NULL,
++          "win.save-settings",          "<Ctrl>T", NULL,
++          "win.go-first-page",          "<Ctrl>Home", NULL,
++          "win.go-last-page",           "<Ctrl>End", NULL,
++          "win.add-bookmark",           "<Ctrl>D", NULL,
++          "win.close",                  "<Ctrl>W", NULL,
++          "win.escape",                 "Escape", NULL,
++          "win.find",                   "<Ctrl>F", "slash", NULL,
++          "win.find-next",              "<Ctrl>G", NULL,
++          "win.find-previous",          "<Ctrl><Shift>G", NULL,
++          "win.select-page",            "<Ctrl>L", NULL,
++          "win.go-backward",            "<Shift>Page_Up", NULL,
++          "win.go-forward",             "<Shift>Page_Down", NULL,
++          "win.go-next-page",           "<Ctrl>Page_Down", "n", NULL,
++          "win.go-previous-page",       "<Ctrl>Page_Up", "p", NULL,
++          "win.sizing-mode::fit-page",  "f", NULL,
++          "win.sizing-mode::fit-width", "w", NULL,
++          "win.open-menu",              "F10", NULL,
++          "win.caret-navigation",       "F7", NULL,
++          "win.zoom-in",                "plus", "<Ctrl>plus", "KP_Add", "<Ctrl>KP_Add", "equal", NULL,
++          "win.zoom-out",               "minus", "<Ctrl>minus", "KP_Subtract", "<Ctrl>KP_Subtract", NULL,
++          "win.show-side-pane",         "F9", NULL,
++          "win.fullscreen",             "F11", NULL,
++          "win.presentation",           "F5", NULL,
++          "win.rotate-left",            "<Ctrl>Left", NULL,
++          "win.rotate-right",           "<Ctrl>Right", NULL,
++          "win.inverted-colors",        "<Ctrl>I", NULL,
++          "win.reload",                 "<Ctrl>R", NULL,
++          NULL
++        };
++
+         EvApplication *application = EV_APPLICATION (gapplication);
+         GtkBuilder *builder;
+         GError *error = NULL;
++        const gchar **it;
+ 
+         G_APPLICATION_CLASS (ev_application_parent_class)->startup (gapplication);
+ 
+@@ -1045,12 +1153,49 @@
+                                          application);
+ 
+         builder = gtk_builder_new ();
+-        gtk_builder_add_from_resource (builder, "/org/gnome/evince/shell/ui/appmenu.ui", &error);
+-        g_assert_no_error (error);
+ 
+-        gtk_application_set_app_menu (GTK_APPLICATION (application),
+-                                      G_MENU_MODEL (gtk_builder_get_object (builder, "appmenu")));
++        if (ev_application_has_traditional_menus (application))
++          {
++            GMenu *recent_section;
++            GMenuModel *recent_menu_model;
++
++            gtk_builder_add_from_resource (builder, "/org/gnome/evince/shell/ui/traditional-menus.ui", &error);
++            g_assert_no_error (error);
++
++            gtk_application_set_menubar (GTK_APPLICATION (application),
++                                         G_MENU_MODEL (gtk_builder_get_object (builder, "menubar")));
++
++            recent_menu_model = ev_recent_menu_model_new (gtk_recent_manager_get_default (),
++                                                          "app.open-file",
++                                                          g_get_application_name ());
++
++            recent_section = G_MENU (gtk_builder_get_object (builder, "recent"));
++            g_menu_append_section (recent_section, NULL, recent_menu_model);
++
++            application->bookmarks_menu = G_MENU (gtk_builder_get_object (builder, "bookmarks"));
++            g_signal_connect_swapped (application, "notify::active-window",
++                                      G_CALLBACK (ev_application_update_bookmarks_menu), application);
++            ev_application_update_bookmarks_menu (application);
++
++            g_object_unref (recent_menu_model);
++          }
++        else
++          {
++            gtk_builder_add_from_resource (builder, "/org/gnome/evince/shell/ui/menus.ui", &error);
++            g_assert_no_error (error);
++
++            gtk_application_set_app_menu (GTK_APPLICATION (application),
++                                          G_MENU_MODEL (gtk_builder_get_object (builder, "appmenu")));
++          }
++
+         g_object_unref (builder);
++
++        it = action_accels;
++        while (it[0])
++          {
++            gtk_application_set_accels_for_action (GTK_APPLICATION (application), it[0], &it[1]);
++            it += g_strv_length ((gchar **) it) + 1;
++          }
+ }
+ 
+ static void
+@@ -1155,8 +1300,11 @@
+ static void
+ ev_application_class_init (EvApplicationClass *ev_application_class)
+ {
++        GObjectClass *object_class = G_OBJECT_CLASS (ev_application_class);
+         GApplicationClass *g_application_class = G_APPLICATION_CLASS (ev_application_class);
+ 
++        object_class->dispose = ev_application_dispose;
++
+         g_application_class->startup = ev_application_startup;
+         g_application_class->activate = ev_application_activate;
+         g_application_class->shutdown = ev_application_shutdown;
+@@ -1175,6 +1323,8 @@
+         if (!g_file_test (ev_application->dot_dir, G_FILE_TEST_EXISTS | G_FILE_TEST_IS_DIR))
+                 ev_application_migrate_config_dir (ev_application);
+ 
++	ev_application->settings = g_settings_new ("org.gnome.Evince");
++
+ 	ev_application_init_session (ev_application);
+ 
+ 	ev_application_accel_map_load (ev_application);
+@@ -1274,3 +1424,170 @@
+         gtk_show_uri (screen, uri, gtk_get_current_event_time (), NULL);
+         g_free (uri);
+ }
++
++/**
++ * ev_application_show_about:
++ * @application: an #EvApplication
++ *
++ * Shows an about dialog for @application with the most recently
++ * focussed window as transient parent.
++ */
++void
++ev_application_show_about (EvApplication *application)
++{
++        const char *authors[] = {
++                "Martin Kretzschmar <m_kretzschmar@gmx.net>",
++                "Jonathan Blandford <jrb@gnome.org>",
++                "Marco Pesenti Gritti <marco@gnome.org>",
++                "Nickolay V. Shmyrev <nshmyrev@yandex.ru>",
++                "Bryan Clark <clarkbw@gnome.org>",
++                "Carlos Garcia Campos <carlosgc@gnome.org>",
++                "Wouter Bolsterlee <wbolster@gnome.org>",
++                "Christian Persch <chpe" "\100" "gnome.org>",
++                NULL
++        };
++
++        const char *documenters[] = {
++                "Nickolay V. Shmyrev <nshmyrev@yandex.ru>",
++                "Phil Bull <philbull@gmail.com>",
++                "Tiffany Antpolski <tiffany.antopolski@gmail.com>",
++                NULL
++        };
++
++        const char *license[] = {
++                N_("Evince is free software; you can redistribute it and/or modify "
++                   "it under the terms of the GNU General Public License as published by "
++                   "the Free Software Foundation; either version 2 of the License, or "
++                   "(at your option) any later version.\n"),
++                N_("Evince is distributed in the hope that it will be useful, "
++                   "but WITHOUT ANY WARRANTY; without even the implied warranty of "
++                   "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the "
++                   "GNU General Public License for more details.\n"),
++                N_("You should have received a copy of the GNU General Public License "
++                   "along with Evince; if not, write to the Free Software Foundation, Inc., "
++                   "51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA\n")
++        };
++
++        char *license_trans;
++
++#ifdef ENABLE_NLS
++        const char **p;
++
++        for (p = authors; *p; ++p)
++                *p = _(*p);
++
++        for (p = documenters; *p; ++p)
++                *p = _(*p);
++#endif
++
++        license_trans = g_strconcat (_(license[0]), "\n", _(license[1]), "\n",
++                                     _(license[2]), "\n", NULL);
++
++        gtk_show_about_dialog (
++                gtk_application_get_active_window (GTK_APPLICATION (application)),
++                "name", _("Evince"),
++                "version", VERSION,
++                "copyright",
++                _("© 1996–2012 The Evince authors"),
++                "license", license_trans,
++                "website", "http://www.gnome.org/projects/evince",
++                "authors", authors,
++                "documenters", documenters,
++                "translator-credits", _("translator-credits"),
++                "logo-icon-name", "evince",
++                "wrap-license", TRUE,
++                NULL);
++
++        g_free (license_trans);
++}
++
++static void
++ev_application_open_dialog_response (GtkWidget *chooser,
++				     gint       response_id,
++				     gpointer   user_data)
++{
++	if (response_id == GTK_RESPONSE_OK) {
++		GSList *uris;
++
++		ev_file_chooser_save_folder (GTK_FILE_CHOOSER (chooser),
++					     G_USER_DIRECTORY_DOCUMENTS);
++
++		uris = gtk_file_chooser_get_uris (GTK_FILE_CHOOSER (chooser));
++
++		ev_application_open_uri_list (EV_APP, uris,
++					      gtk_widget_get_screen (chooser),
++					      gtk_get_current_event_time ());
++
++		g_slist_foreach (uris, (GFunc)g_free, NULL);
++		g_slist_free (uris);
++	}
++
++	gtk_widget_destroy (chooser);
++}
++
++/**
++ * ev_application_open:
++ * @application: an #EvApplication
++ *
++ * Shows an open dialog and opens the chosen document(s) in new windows.
++ *
++ * The dialog's parent will be the most recently focussed window of
++ * @application.
++ */
++void
++ev_application_open (EvApplication *application)
++{
++	GtkWidget *chooser;
++	GtkWindow *active_window;
++
++	active_window = gtk_application_get_active_window (GTK_APPLICATION (application));
++
++	chooser = gtk_file_chooser_dialog_new (_("Open Document"),
++					       active_window,
++					       GTK_FILE_CHOOSER_ACTION_OPEN,
++					       _("Cancel"), GTK_RESPONSE_CANCEL,
++					       _("Open"), GTK_RESPONSE_OK,
++					       NULL);
++
++	ev_document_factory_add_filters (chooser, NULL);
++	gtk_file_chooser_set_select_multiple (GTK_FILE_CHOOSER (chooser), TRUE);
++	gtk_file_chooser_set_local_only (GTK_FILE_CHOOSER (chooser), FALSE);
++
++	ev_file_chooser_restore_folder (GTK_FILE_CHOOSER (chooser),
++					NULL, G_USER_DIRECTORY_DOCUMENTS);
++
++	g_signal_connect (chooser, "response",
++			  G_CALLBACK (ev_application_open_dialog_response), NULL);
++
++	gtk_widget_show (chooser);
++}
++
++GSettings *
++ev_application_get_settings (EvApplication *application)
++{
++	g_return_val_if_fail (EV_IS_APPLICATION (application), NULL);
++
++	return application->settings;
++}
++
++gboolean
++ev_application_has_traditional_menus (EvApplication *application)
++{
++	GdkDisplay *display;
++	GdkScreen *screen;
++	GtkSettings *settings;
++	gboolean show_app_menu;
++	gboolean show_menubar;
++
++	g_return_val_if_fail (EV_IS_APPLICATION (application), FALSE);
++
++	display = gdk_display_get_default ();
++	screen = gdk_display_get_default_screen (display);
++	settings = gtk_settings_get_for_screen (screen);
++	g_object_get (G_OBJECT (settings),
++		      "gtk-shell-shows-app-menu", &show_app_menu,
++		      "gtk-shell-shows-menubar", &show_menubar,
++		      NULL);
++
++	return !show_app_menu || show_menubar;
++}
+Index: evince-3.10.3/shell/ev-application.h
+===================================================================
+--- evince-3.10.3.orig/shell/ev-application.h	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-application.h	2014-04-28 15:33:25.022869346 +0200
+@@ -81,6 +81,14 @@
+                                                       GdkScreen       *screen,
+                                                       const char      *topic);
+ 
++void              ev_application_show_about          (EvApplication *application);
++
++void              ev_application_open                (EvApplication   *application);
++
++GSettings *       ev_application_get_settings        (EvApplication   *application);
++
++gboolean          ev_application_has_traditional_menus (EvApplication *application);
++
+ G_END_DECLS
+ 
+ #endif /* !EV_APPLICATION_H */
+Index: evince-3.10.3/shell/ev-bookmarks.c
+===================================================================
+--- evince-3.10.3.orig/shell/ev-bookmarks.c	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-bookmarks.c	2014-04-28 15:33:25.026869346 +0200
+@@ -224,6 +224,14 @@
+         return g_list_copy (bookmarks->items);
+ }
+ 
++gboolean
++ev_bookmarks_has_bookmarks (EvBookmarks *bookmarks)
++{
++        g_return_val_if_fail (EV_IS_BOOKMARKS (bookmarks), NULL);
++
++        return bookmarks->items != NULL;
++}
++
+ void
+ ev_bookmarks_add (EvBookmarks *bookmarks,
+                   EvBookmark  *bookmark)
+Index: evince-3.10.3/shell/ev-bookmarks.h
+===================================================================
+--- evince-3.10.3.orig/shell/ev-bookmarks.h	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-bookmarks.h	2014-04-28 15:33:25.026869346 +0200
+@@ -43,6 +43,7 @@
+ GType        ev_bookmarks_get_type      (void) G_GNUC_CONST;
+ EvBookmarks *ev_bookmarks_new           (EvMetadata *metadata);
+ GList       *ev_bookmarks_get_bookmarks (EvBookmarks *bookmarks);
++gboolean     ev_bookmarks_has_bookmarks (EvBookmarks *bookmarks);
+ void         ev_bookmarks_add           (EvBookmarks *bookmarks,
+                                          EvBookmark  *bookmark);
+ void         ev_bookmarks_delete        (EvBookmarks *bookmarks,
+Index: evince-3.10.3/shell/ev-recent-menu-model.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ evince-3.10.3/shell/ev-recent-menu-model.c	2014-04-28 15:33:25.026869346 +0200
+@@ -0,0 +1,108 @@
++/*
++ * Copyright 2014 Canonical Ltd
++ *
++ * Evince is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * Evince is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
++ *
++ * Author: Lars Uebernickel <lars.uebernickel@canonical.com>
++ */
++
++#include "ev-recent-menu-model.h"
++
++typedef struct
++{
++  GMenu *menu;
++  GtkRecentManager *manager;
++  gchar *action_name;
++  gchar *application;
++} EvRecentMenuModel;
++
++static void
++ev_recent_menu_model_update (GtkRecentManager *manager,
++                             gpointer          data)
++{
++  EvRecentMenuModel *recent_menu = data;
++  GList *items, *it;
++  guint n_items = 0;
++
++  g_menu_remove_all (recent_menu->menu);
++
++  items = gtk_recent_manager_get_items (recent_menu->manager);
++
++  for (it = items; it && n_items < 5; it = it->next)
++    {
++      GtkRecentInfo *info = it->data;
++      gchar *label;
++      GIcon *icon;
++      GMenuItem *item;
++
++      if (!gtk_recent_info_has_application (info, recent_menu->application))
++        continue;
++
++      label = g_strdup_printf ("_%d. %s", n_items + 1, gtk_recent_info_get_display_name (info));
++
++      item = g_menu_item_new (label, NULL);
++      g_menu_item_set_action_and_target (item, recent_menu->action_name,
++                                         "s", gtk_recent_info_get_uri (info));
++
++      icon = gtk_recent_info_get_gicon (info);
++      if (icon)
++        {
++          g_menu_item_set_icon (item, icon);
++          g_object_unref (icon);
++        }
++
++      g_menu_append_item (recent_menu->menu, item);
++
++      g_free (label);
++      g_object_unref (item);
++
++      n_items++;
++    }
++
++  g_list_free_full (items, (GDestroyNotify) gtk_recent_info_unref);
++}
++
++static void
++ev_recent_menu_model_destroy (gpointer  data,
++                              GObject  *menu)
++{
++  EvRecentMenuModel *recent_menu = data;
++
++  g_signal_handlers_disconnect_by_func (recent_menu->manager, ev_recent_menu_model_update, recent_menu);
++  g_object_unref (recent_menu->manager);
++  g_free (recent_menu->application);
++  g_free (recent_menu->action_name);
++
++  g_slice_free (EvRecentMenuModel, recent_menu);
++}
++
++GMenuModel *
++ev_recent_menu_model_new (GtkRecentManager *manager,
++                          const gchar      *action_name,
++                          const gchar      *application)
++{
++  EvRecentMenuModel *recent_menu;
++
++  recent_menu = g_slice_new0 (EvRecentMenuModel);
++  recent_menu->menu = g_menu_new ();
++  recent_menu->manager = g_object_ref (manager);
++  recent_menu->action_name = g_strdup (action_name);
++  recent_menu->application = g_strdup (application);
++
++  g_object_weak_ref (G_OBJECT (recent_menu->menu), ev_recent_menu_model_destroy, recent_menu);
++  g_signal_connect (manager, "changed", G_CALLBACK (ev_recent_menu_model_update), recent_menu);
++
++  return G_MENU_MODEL (recent_menu->menu);
++}
+Index: evince-3.10.3/shell/ev-recent-menu-model.h
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ evince-3.10.3/shell/ev-recent-menu-model.h	2014-04-28 15:33:25.026869346 +0200
+@@ -0,0 +1,30 @@
++/*
++ * Copyright 2014 Canonical Ltd
++ *
++ * Evince is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * Evince is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
++ *
++ * Author: Lars Uebernickel <lars.uebernickel@canonical.com>
++ */
++
++#ifndef EV_RECENT_MENU_MODEL_H
++#define EV_RECENT_MENU_MODEL_H
++
++#include <gtk/gtk.h>
++
++GMenuModel *            ev_recent_menu_model_new                        (GtkRecentManager *manager,
++                                                                         const gchar      *action_name,
++                                                                         const gchar      *application);
++
++#endif
+Index: evince-3.10.3/shell/ev-sidebar-bookmarks.c
+===================================================================
+--- evince-3.10.3.orig/shell/ev-sidebar-bookmarks.c	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-sidebar-bookmarks.c	2014-04-28 15:33:25.026869346 +0200
+@@ -40,11 +40,6 @@
+         N_COLUMNS
+ };
+ 
+-enum {
+-        ADD_BOOKMARK,
+-        N_SIGNALS
+-};
+-
+ struct _EvSidebarBookmarksPrivate {
+         EvDocumentModel *model;
+         EvBookmarks     *bookmarks;
+@@ -68,8 +63,6 @@
+                         G_IMPLEMENT_INTERFACE (EV_TYPE_SIDEBAR_PAGE,
+                                                ev_sidebar_bookmarks_page_iface_init))
+ 
+-static guint signals[N_SIGNALS];
+-
+ static const gchar popup_menu_ui[] =
+         "<popup name=\"BookmarksPopup\" action=\"BookmarksPopupAction\">\n"
+         "  <menuitem name=\"OpenBookmark\" action=\"OpenBookmark\"/>\n"
+@@ -224,16 +217,6 @@
+ }
+ 
+ static void
+-ev_sidebar_bookmarks_add_clicked (GtkWidget          *button,
+-                                  EvSidebarBookmarks *sidebar_bookmarks)
+-{
+-        /* Let the window add the bookmark since
+-         * since we don't know the page title
+-         */
+-        g_signal_emit (sidebar_bookmarks, signals[ADD_BOOKMARK], 0);
+-}
+-
+-static void
+ ev_sidebar_bookmarks_del_clicked (GtkWidget          *button,
+                                   EvSidebarBookmarks *sidebar_bookmarks)
+ {
+@@ -469,9 +452,8 @@
+         hbox = gtk_button_box_new (GTK_ORIENTATION_HORIZONTAL);
+ 
+         priv->add_button = gtk_button_new_from_stock (GTK_STOCK_ADD);
+-        g_signal_connect (priv->add_button, "clicked",
+-                          G_CALLBACK (ev_sidebar_bookmarks_add_clicked),
+-                          sidebar_bookmarks);
++        gtk_actionable_set_action_name (GTK_ACTIONABLE (priv->add_button),
++                                        "win.add-bookmark");
+         gtk_widget_set_sensitive (priv->add_button, FALSE);
+         gtk_box_pack_start (GTK_BOX (hbox), priv->add_button, TRUE, TRUE, 6);
+         gtk_widget_show (priv->add_button);
+@@ -534,16 +516,6 @@
+         g_type_class_add_private (g_object_class, sizeof (EvSidebarBookmarksPrivate));
+ 
+         g_object_class_override_property (g_object_class, PROP_WIDGET, "main-widget");
+-
+-        signals[ADD_BOOKMARK] =
+-                g_signal_new ("add-bookmark",
+-                              G_TYPE_FROM_CLASS (g_object_class),
+-                              G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
+-                              G_STRUCT_OFFSET (EvSidebarBookmarksClass, add_bookmark),
+-                              NULL, NULL,
+-                              g_cclosure_marshal_VOID__VOID,
+-                              G_TYPE_NONE, 0,
+-                              G_TYPE_NONE);
+ }
+ 
+ GtkWidget *
+Index: evince-3.10.3/shell/ev-toolbar.c
+===================================================================
+--- evince-3.10.3.orig/shell/ev-toolbar.c	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-toolbar.c	2014-04-28 15:33:25.026869346 +0200
+@@ -24,9 +24,12 @@
+ 
+ #include "ev-toolbar.h"
+ 
++#include <glib/gi18n.h>
+ #include "ev-stock-icons.h"
+ #include "ev-zoom-action.h"
+ #include "ev-history-action.h"
++#include "ev-application.h"
++#include "ev-recent-menu-model.h"
+ #include <math.h>
+ 
+ enum
+@@ -40,6 +43,7 @@
+ 
+         GtkWidget *view_menu_button;
+         GtkWidget *action_menu_button;
++        GMenu *bookmarks_section;
+ };
+ 
+ G_DEFINE_TYPE (EvToolbar, ev_toolbar, GTK_TYPE_TOOLBAR)
+@@ -62,38 +66,49 @@
+ }
+ 
+ static void
+-ev_toolbar_set_button_action (EvToolbar *ev_toolbar,
+-                              GtkButton *button,
+-                              GtkAction *action)
++ev_toolbar_set_button_action (EvToolbar   *ev_toolbar,
++                              GtkButton   *button,
++                              const gchar *action_name,
++                              const gchar *tooltip)
+ {
+-        gtk_activatable_set_related_action (GTK_ACTIVATABLE (button), action);
++        gtk_actionable_set_action_name (GTK_ACTIONABLE (button), action_name);
+         gtk_button_set_label (button, NULL);
+         gtk_button_set_focus_on_click (button, FALSE);
+-        gtk_widget_set_tooltip_text (GTK_WIDGET (button), gtk_action_get_tooltip (action));
++        gtk_widget_set_tooltip_text (GTK_WIDGET (button), tooltip);
+ }
+ 
+ static GtkWidget *
+-ev_toolbar_create_button (EvToolbar *ev_toolbar,
+-                          GtkAction *action)
++ev_toolbar_create_button (EvToolbar   *ev_toolbar,
++                          const gchar *action_name,
++                          const gchar *icon_name,
++                          const gchar *tooltip)
+ {
+         GtkWidget *button = gtk_button_new ();
++        GtkWidget *image;
++
++        image = gtk_image_new_from_icon_name (icon_name, GTK_ICON_SIZE_MENU);
+ 
+         gtk_widget_set_valign (button, GTK_ALIGN_CENTER);
+-        gtk_button_set_image (GTK_BUTTON (button), gtk_image_new ());
+-        ev_toolbar_set_button_action (ev_toolbar, GTK_BUTTON (button), action);
++        gtk_button_set_image (GTK_BUTTON (button), image);
++        ev_toolbar_set_button_action (ev_toolbar, GTK_BUTTON (button), action_name, tooltip);
+ 
+         return button;
+ }
+ 
+ static GtkWidget *
+ ev_toolbar_create_toggle_button (EvToolbar *ev_toolbar,
+-                                 GtkAction *action)
++                                 const gchar *action_name,
++                                 const gchar *icon_name,
++                                 const gchar *tooltip)
+ {
+         GtkWidget *button = gtk_toggle_button_new ();
++        GtkWidget *image;
++
++        image = gtk_image_new_from_icon_name (icon_name, GTK_ICON_SIZE_MENU);
+ 
+         gtk_widget_set_valign (button, GTK_ALIGN_CENTER);
+-        gtk_button_set_image (GTK_BUTTON (button), gtk_image_new ());
+-        ev_toolbar_set_button_action (ev_toolbar, GTK_BUTTON (button), action);
++        gtk_button_set_image (GTK_BUTTON (button), image);
++        ev_toolbar_set_button_action (ev_toolbar, GTK_BUTTON (button), action_name, tooltip);
+ 
+         return button;
+ }
+@@ -101,17 +116,21 @@
+ static GtkWidget *
+ ev_toolbar_create_menu_button (EvToolbar   *ev_toolbar,
+                                const gchar *icon_name,
+-                               GtkWidget   *menu,
++                               GMenuModel  *menu,
+                                GtkAlign     menu_align)
+ {
+-        GtkWidget *button = gtk_menu_button_new ();
++        GtkWidget *button;
++        GtkMenu *popup;
+ 
++        button = gtk_menu_button_new ();
+         gtk_widget_set_valign (button, GTK_ALIGN_CENTER);
+         gtk_button_set_image (GTK_BUTTON (button), gtk_image_new ());
+         gtk_image_set_from_icon_name (GTK_IMAGE (gtk_button_get_image (GTK_BUTTON (button))),
+                                       icon_name, GTK_ICON_SIZE_MENU);
+-        gtk_widget_set_halign (menu, menu_align);
+-        gtk_menu_button_set_popup (GTK_MENU_BUTTON (button), menu);
++        gtk_menu_button_set_menu_model (GTK_MENU_BUTTON (button), menu);
++
++        popup = gtk_menu_button_get_popup (GTK_MENU_BUTTON (button));
++        gtk_widget_set_halign (GTK_WIDGET (popup), menu_align);
+ 
+         return button;
+ }
+@@ -132,16 +151,39 @@
+ }
+ 
+ static void
++ev_toolbar_update_bookmarks (EvToolbar *toolbar)
++{
++        GMenu *bookmarks_section;
++        GMenuModel *bookmarks_submenu;
++
++        /* The bookmarks section has one or two items: "Add Bookmark"
++         * and the "Bookmarks" submenu item. Hide the latter when there
++         * are no bookmarks.
++         */
++
++        bookmarks_section = toolbar->priv->bookmarks_section;
++        bookmarks_submenu = ev_window_get_bookmarks_menu (toolbar->priv->window);
++
++        if (g_menu_model_get_n_items (bookmarks_submenu) > 0) {
++                if (g_menu_model_get_n_items (G_MENU_MODEL (bookmarks_section)) == 1)
++                        g_menu_append_submenu (bookmarks_section, _("Bookmarks"), bookmarks_submenu);
++        }
++        else {
++                if (g_menu_model_get_n_items (G_MENU_MODEL (bookmarks_section)) == 2)
++                        g_menu_remove (bookmarks_section, 1);
++        }
++}
++
++static void
+ ev_toolbar_constructed (GObject *object)
+ {
+         EvToolbar      *ev_toolbar = EV_TOOLBAR (object);
+-        GtkUIManager   *ui_manager;
+         GtkActionGroup *action_group;
+         GtkWidget      *tool_item;
+         GtkWidget      *hbox;
+         GtkAction      *action;
+         GtkWidget      *button;
+-        GtkWidget      *menu;
++        GMenuModel     *menu;
+ 
+         G_OBJECT_CLASS (ev_toolbar_parent_class)->constructed (object);
+ 
+@@ -151,18 +193,17 @@
+                                      GTK_STYLE_CLASS_MENUBAR);
+ 
+         action_group = ev_window_get_main_action_group (ev_toolbar->priv->window);
+-        ui_manager = ev_window_get_ui_manager (ev_toolbar->priv->window);
+ 
+         /* Navigation */
+         hbox = ev_toolbar_create_button_group (ev_toolbar);
+ 
+-        action = gtk_action_group_get_action (action_group, "GoPreviousPage");
+-        button = ev_toolbar_create_button (ev_toolbar, action);
++        button = ev_toolbar_create_button (ev_toolbar, "win.go-previous-page",
++                                           "go-up-symbolic", _("Go to the previous page"));
+         gtk_container_add (GTK_CONTAINER (hbox), button);
+         gtk_widget_show (button);
+ 
+-        action = gtk_action_group_get_action (action_group, "GoNextPage");
+-        button = ev_toolbar_create_button (ev_toolbar, action);
++        button = ev_toolbar_create_button (ev_toolbar, "win.go-next-page",
++                                           "go-down-symbolic", _("Go to the next page"));
+         gtk_container_add (GTK_CONTAINER (hbox), button);
+         gtk_widget_show (button);
+ 
+@@ -195,8 +236,8 @@
+         gtk_widget_show (tool_item);
+ 
+         /* Find */
+-        action = gtk_action_group_get_action (action_group, "EditFind");
+-        button = ev_toolbar_create_toggle_button (ev_toolbar, action);
++        button = ev_toolbar_create_toggle_button (ev_toolbar, "win.find", "edit-find-symbolic",
++                                                  _("Find a word or phrase in the document"));
+         tool_item = GTK_WIDGET (gtk_tool_item_new ());
+         gtk_container_add (GTK_CONTAINER (tool_item), button);
+         gtk_widget_show (button);
+@@ -211,30 +252,55 @@
+         gtk_container_add (GTK_CONTAINER (ev_toolbar), tool_item);
+         gtk_widget_show (tool_item);
+ 
+-        /* View Menu */
+-        menu = gtk_ui_manager_get_widget (ui_manager, "/ViewMenuPopup");
+-        button = ev_toolbar_create_menu_button (ev_toolbar, "document-properties-symbolic",
+-                                                menu, GTK_ALIGN_END);
+-        ev_toolbar->priv->view_menu_button = button;
+-        tool_item = GTK_WIDGET (gtk_tool_item_new ());
+-        gtk_container_add (GTK_CONTAINER (tool_item), button);
+-        gtk_widget_show (button);
+-        gtk_widget_set_margin_right (tool_item, 6);
+-
+-        gtk_container_add (GTK_CONTAINER (ev_toolbar), tool_item);
+-        gtk_widget_show (tool_item);
+-
+-        /* Action Menu */
+-        menu = gtk_ui_manager_get_widget (ui_manager, "/ActionMenu");
+-        button = ev_toolbar_create_menu_button (ev_toolbar, "emblem-system-symbolic",
+-                                                menu, GTK_ALIGN_END);
+-        ev_toolbar->priv->action_menu_button = button;
+-        tool_item = GTK_WIDGET (gtk_tool_item_new ());
+-        gtk_container_add (GTK_CONTAINER (tool_item), button);
+-        gtk_widget_show (button);
++        if (!ev_application_has_traditional_menus (EV_APP)) {
++                GtkBuilder *builder;
++                GMenu *recent_submenu;
++                GMenuModel *recent_menu_model;
++
++                builder = gtk_builder_new_from_resource ("/org/gnome/evince/shell/ui/menus.ui");
++
++                /* View Menu */
++                menu = G_MENU_MODEL (gtk_builder_get_object (builder, "view-menu"));
++                button = ev_toolbar_create_menu_button (ev_toolbar, "document-properties-symbolic",
++                                                        menu, GTK_ALIGN_END);
++                ev_toolbar->priv->view_menu_button = button;
++                tool_item = GTK_WIDGET (gtk_tool_item_new ());
++                gtk_widget_set_margin_left (tool_item, 12);
++                gtk_container_add (GTK_CONTAINER (tool_item), button);
++                gtk_widget_show (button);
++                gtk_widget_set_margin_right (tool_item, 6);
++
++                gtk_container_add (GTK_CONTAINER (ev_toolbar), tool_item);
++                gtk_widget_show (tool_item);
++
++                /* Action Menu */
++                menu = G_MENU_MODEL (gtk_builder_get_object (builder, "action-menu"));
++                button = ev_toolbar_create_menu_button (ev_toolbar, "emblem-system-symbolic",
++                                                        menu, GTK_ALIGN_END);
++                ev_toolbar->priv->action_menu_button = button;
++                tool_item = GTK_WIDGET (gtk_tool_item_new ());
++                gtk_container_add (GTK_CONTAINER (tool_item), button);
++                gtk_widget_show (button);
++
++                gtk_container_add (GTK_CONTAINER (ev_toolbar), tool_item);
++                gtk_widget_show (tool_item);
++
++                /* insert dynamic recent files submenu */
++                recent_menu_model = ev_recent_menu_model_new (gtk_recent_manager_get_default (),
++                                                              "app.open-file",
++                                                              g_get_application_name ());
++                recent_submenu = G_MENU (gtk_builder_get_object (builder, "recent"));
++                g_menu_append_section (recent_submenu, NULL, recent_menu_model);
++
++                /* insert bookmarks section */
++                ev_toolbar->priv->bookmarks_section = G_MENU (gtk_builder_get_object (builder, "bookmarks"));
++                g_signal_connect_swapped (ev_window_get_bookmarks_menu (ev_toolbar->priv->window), "items-changed",
++                                          G_CALLBACK (ev_toolbar_update_bookmarks), ev_toolbar);
++                ev_toolbar_update_bookmarks (ev_toolbar);
+ 
+-        gtk_container_add (GTK_CONTAINER (ev_toolbar), tool_item);
+-        gtk_widget_show (tool_item);
++                g_object_unref (recent_menu_model);
++                g_object_unref (builder);
++        }
+ }
+ 
+ static void
+Index: evince-3.10.3/shell/ev-utils.c
+===================================================================
+--- evince-3.10.3.orig/shell/ev-utils.c	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-utils.c	2014-04-28 15:33:25.030869346 +0200
+@@ -22,6 +22,7 @@
+ 
+ #include "ev-utils.h"
+ #include "ev-file-helpers.h"
++#include "ev-application.h"
+ 
+ #include <string.h>
+ #include <math.h>
+@@ -391,3 +392,90 @@
+ 	g_slist_free (pixbuf_formats);
+ 	return NULL;
+ }
++
++static const gchar *
++get_settings_key_for_directory (GUserDirectory directory)
++{
++	switch (directory) {
++		case G_USER_DIRECTORY_PICTURES:
++			return  "pictures-directory";
++		case G_USER_DIRECTORY_DOCUMENTS:
++		default:
++			return  "document-directory";
++	}
++}
++
++/**
++ * ev_file_chooser_save_folder:
++ * @file_chooser: a #GtkFileChooser
++ * @uri: (allow-none): optional fallback path
++ * @directory: the #GUserDirectory from which to restore
++ *
++ * Saves the directory of @file_chooser for @directory. Use
++ * ev_file_chooser_restore_folder() to restore this folder in a
++ * different file chooser.
++ */
++void
++ev_file_chooser_save_folder (GtkFileChooser *file_chooser,
++			     GUserDirectory  directory)
++{
++	gchar *uri, *folder;
++
++	folder = gtk_file_chooser_get_current_folder (file_chooser);
++	if (g_strcmp0 (folder, g_get_user_special_dir (directory)) == 0) {
++		/* Store 'nothing' if the folder is the default one */
++		uri = NULL;
++	} else {
++		uri = gtk_file_chooser_get_current_folder_uri (file_chooser);
++	}
++	g_free (folder);
++
++	g_settings_set (ev_application_get_settings (EV_APP),
++			get_settings_key_for_directory (directory),
++			"ms", uri);
++	g_free (uri);
++}
++
++/**
++ * ev_file_chooser_restore_folder:
++ * @file_chooser: a #GtkFileChooser
++ * @uri: (allow-none): optional fallback path
++ * @directory: the #GUserDirectory from which to restore
++ *
++ * Sets the folder of @file_chooser to the last-visited directory for
++ * the given @directory type.
++ */
++void
++ev_file_chooser_restore_folder (GtkFileChooser *file_chooser,
++				const gchar    *uri,
++				GUserDirectory  directory)
++{
++	const gchar *dir;
++	gchar *folder_uri;
++	gchar *parent_uri = NULL;
++
++	g_settings_get (ev_application_get_settings (EV_APP),
++			get_settings_key_for_directory (directory),
++			"ms", &folder_uri);
++	if (folder_uri == NULL && uri != NULL) {
++		GFile *file, *parent;
++
++		file = g_file_new_for_uri (uri);
++		parent = g_file_get_parent (file);
++		g_object_unref (file);
++		if (parent) {
++			folder_uri = parent_uri = g_file_get_uri (parent);
++			g_object_unref (parent);
++		}
++	}
++
++	if (folder_uri) {
++		gtk_file_chooser_set_current_folder_uri (file_chooser, folder_uri);
++	} else {
++		dir = g_get_user_special_dir (directory);
++		gtk_file_chooser_set_current_folder (file_chooser,
++						     dir ? dir : g_get_home_dir ());
++	}
++
++	g_free (folder_uri);
++}
+Index: evince-3.10.3/shell/ev-utils.h
+===================================================================
+--- evince-3.10.3.orig/shell/ev-utils.h	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-utils.h	2014-04-28 15:33:25.030869346 +0200
+@@ -42,6 +42,13 @@
+ void           		file_chooser_dialog_add_writable_pixbuf_formats (GtkFileChooser *chooser);
+ GdkPixbufFormat* 	get_gdk_pixbuf_format_by_extension (const gchar *uri);
+ 
++void			ev_file_chooser_save_folder (GtkFileChooser *file_chooser,
++						     GUserDirectory  directory);
++
++void			ev_file_chooser_restore_folder (GtkFileChooser *file_chooser,
++							const gchar    *uri,
++							GUserDirectory  directory);
++
+ G_END_DECLS
+ 
+ #endif /* __EV_VIEW_H__ */
+Index: evince-3.10.3/shell/ev-window.c
+===================================================================
+--- evince-3.10.3.orig/shell/ev-window.c	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-window.c	2014-04-28 15:33:37.626869432 +0200
+@@ -87,10 +87,10 @@
+ #include "ev-print-operation.h"
+ #include "ev-progress-message-area.h"
+ #include "ev-annotation-properties-dialog.h"
+-#include "ev-bookmarks.h"
+ #include "ev-bookmark-action.h"
+ #include "ev-zoom-action.h"
+ #include "ev-toolbar.h"
++#include "ev-bookmarks.h"
+ 
+ #ifdef ENABLE_DBUS
+ #include "ev-gdbus-generated.h"
+@@ -171,24 +171,26 @@
+ 
+ 	/* UI Builders */
+ 	GtkActionGroup   *action_group;
+-	GtkActionGroup   *view_popup_action_group;
+-	GtkActionGroup   *attachment_popup_action_group;
+ 	GtkActionGroup   *zoom_selector_popup_action_group;
+ 	GtkRecentManager *recent_manager;
+-	GtkActionGroup   *recent_action_group;
+-	guint             recent_ui_id;
+ 	GtkActionGroup   *bookmarks_action_group;
+ 	guint             bookmarks_ui_id;
+ 	GtkUIManager     *ui_manager;
+ 
+ 	/* Popup view */
+-	GtkWidget    *view_popup;
+ 	EvLink       *link;
+ 	EvImage      *image;
+ 	EvAnnotation *annot;
+ 
++	GMenuModel *document_view_menu;
++	GMenuModel *external_link_section;
++	GMenuModel *internal_link_section;
++	GMenuModel *image_section;
++	GMenuModel *attachment_section;
++	GMenuModel *annotation_section;
++	GtkWidget *popup_menu;
++
+ 	/* Popup attachment */
+-	GtkWidget    *attachment_popup;
+ 	GList        *attach_list;
+ 
+ 	/* Document */
+@@ -206,6 +208,7 @@
+ 	EvWindowTitle *title;
+ 	EvMetadata *metadata;
+ 	EvBookmarks *bookmarks;
++	GMenu *bookmarks_menu;
+ 
+ 	/* Load params */
+ 	EvLinkDest       *dest;
+@@ -262,8 +265,6 @@
+ #define GS_OVERRIDE_RESTRICTIONS "override-restrictions"
+ #define GS_PAGE_CACHE_SIZE       "page-cache-size"
+ #define GS_AUTO_RELOAD           "auto-reload"
+-#define GS_LAST_DOCUMENT_DIRECTORY "document-directory"
+-#define GS_LAST_PICTURES_DIRECTORY "pictures-directory"
+ 
+ #define SIDEBAR_DEFAULT_SIZE    132
+ #define LINKS_SIDEBAR_ID "links"
+@@ -328,29 +329,9 @@
+ static void     ev_window_run_fullscreen                (EvWindow         *window);
+ static void     ev_window_stop_fullscreen               (EvWindow         *window,
+ 							 gboolean          unfullscreen_window);
+-static void     ev_window_cmd_view_fullscreen           (GtkAction        *action,
+-							 EvWindow         *window);
+ static void     ev_window_run_presentation              (EvWindow         *window);
+ static void     ev_window_stop_presentation             (EvWindow         *window,
+ 							 gboolean          unfullscreen_window);
+-static void     ev_window_cmd_view_presentation         (GtkAction        *action,
+-							 EvWindow         *window);
+-static void     ev_view_popup_cmd_open_link             (GtkAction        *action,
+-							 EvWindow         *window);
+-static void     ev_view_popup_cmd_open_link_new_window  (GtkAction        *action,
+-							 EvWindow         *window);
+-static void     ev_view_popup_cmd_copy_link_address     (GtkAction        *action,
+-							 EvWindow         *window);
+-static void     ev_view_popup_cmd_save_image_as         (GtkAction        *action,
+-							 EvWindow         *window);
+-static void     ev_view_popup_cmd_copy_image            (GtkAction        *action,
+-							 EvWindow         *window);
+-static void     ev_view_popup_cmd_annot_properties      (GtkAction        *action,
+-							 EvWindow         *window);
+-static void	ev_attachment_popup_cmd_open_attachment (GtkAction        *action,
+-							 EvWindow         *window);
+-static void	ev_attachment_popup_cmd_save_attachment_as (GtkAction     *action, 
+-							 EvWindow         *window);
+ static void	ev_window_cmd_view_fit_page 		(GtkAction 	  *action,
+ 							 EvWindow 	  *ev_window);
+ static void	ev_window_cmd_view_fit_width 		(GtkAction 	  *action,
+@@ -361,8 +342,6 @@
+ 							 EvLink           *link, 
+ 							 EvWindow         *window);
+ static void     ev_window_update_find_status_message    (EvWindow         *ev_window);
+-static void     ev_window_cmd_edit_find                 (GtkAction        *action,
+-							 EvWindow         *ev_window);
+ static void     find_bar_search_changed_cb              (EggFindBar       *find_bar,
+ 							 GParamSpec       *param,
+ 							 EvWindow         *ev_window);
+@@ -396,6 +375,17 @@
+ }
+ 
+ static void
++ev_window_set_action_enabled (EvWindow   *ev_window,
++			      const char *name,
++			      gboolean    enabled)
++{
++	GAction *action;
++
++	action = g_action_map_lookup_action (G_ACTION_MAP (ev_window), name);
++	g_simple_action_set_enabled (G_SIMPLE_ACTION (action), enabled);
++}
++
++static void
+ ev_window_set_action_sensitive (EvWindow   *ev_window,
+ 		    	        const char *name,
+ 		  	        gboolean    sensitive)
+@@ -419,6 +409,7 @@
+ 	gboolean can_get_text = FALSE;
+ 	gboolean has_pages = FALSE;
+ 	gboolean can_find = FALSE;
++	GSettings *settings = ev_application_get_settings (EV_APP);
+ 
+ 	if (document) {
+ 		has_document = TRUE;
+@@ -438,10 +429,8 @@
+ 		can_find = TRUE;
+ 	}
+ 
+-	if (has_document && ev_window->priv->settings) {
+-		override_restrictions =
+-			g_settings_get_boolean (ev_window->priv->settings,
+-						GS_OVERRIDE_RESTRICTIONS);
++	if (has_document && settings) {
++		override_restrictions = g_settings_get_boolean (settings, GS_OVERRIDE_RESTRICTIONS);
+ 	}
+ 
+ 	if (!override_restrictions && info && info->fields_mask & EV_DOCUMENT_INFO_PERMISSIONS) {
+@@ -463,33 +452,31 @@
+ 	}
+ 
+ 	/* File menu */
+-	ev_window_set_action_sensitive (ev_window, "FileOpenCopy", has_document);
+-	ev_window_set_action_sensitive (ev_window, "FileSaveAs", has_document && ok_to_copy);
+-	ev_window_set_action_sensitive (ev_window, "FilePrint", has_pages && ok_to_print);
+-	ev_window_set_action_sensitive (ev_window, "FileProperties", has_document && has_properties);
+-	ev_window_set_action_sensitive (ev_window, "FileOpenContainingFolder", has_document);
+-	ev_window_set_action_sensitive (ev_window, "FileSendTo",
+-					has_document && ev_window->priv->has_mailto_handler);
+-	ev_window_set_action_sensitive (ev_window, "ViewPresentation", has_document);
++	ev_window_set_action_enabled (ev_window, "open-copy", has_document);
++	ev_window_set_action_enabled (ev_window, "save-copy", has_document && ok_to_copy);
++	ev_window_set_action_enabled (ev_window, "print", has_pages && ok_to_print);
++	ev_window_set_action_enabled (ev_window, "show-properties", has_document && has_properties);
++	ev_window_set_action_enabled (ev_window, "open-containing-folder", has_document);
++	ev_window_set_action_enabled (ev_window, "send-to",
++				      has_document && ev_window->priv->has_mailto_handler);
++	ev_window_set_action_enabled (ev_window, "presentation", has_document);
+ 
+         /* Edit menu */
+-	ev_window_set_action_sensitive (ev_window, "EditSelectAll", has_pages && can_get_text);
+-	ev_window_set_action_sensitive (ev_window, "EditFind", can_find);
+-	ev_window_set_action_sensitive (ev_window, "Slash", can_find);
+-	ev_window_set_action_sensitive (ev_window, "CtrlF", can_find);
+-	ev_window_set_action_sensitive (ev_window, "EditRotateLeft", has_pages);
+-	ev_window_set_action_sensitive (ev_window, "EditRotateRight", has_pages);
++	ev_window_set_action_enabled (ev_window, "select-all", has_pages && can_get_text);
++	ev_window_set_action_enabled (ev_window, "find", can_find);
++	ev_window_set_action_enabled (ev_window, "rotate-left", has_pages);
++	ev_window_set_action_enabled (ev_window, "rotate-right", has_pages);
+ 
+         /* View menu */
+-	ev_window_set_action_sensitive (ev_window, "ViewContinuous", has_pages);
+-	ev_window_set_action_sensitive (ev_window, "ViewDual", has_pages);
+-	ev_window_set_action_sensitive (ev_window, "ViewDualOddLeft", has_pages);
+-	ev_window_set_action_sensitive (ev_window, "ViewReload", has_pages);
+-	ev_window_set_action_sensitive (ev_window, "ViewAutoscroll", has_pages);
+-	ev_window_set_action_sensitive (ev_window, "ViewInvertedColors", has_pages);
++	ev_window_set_action_enabled (ev_window, "continuous", has_pages);
++	ev_window_set_action_enabled (ev_window, "dual-page", has_pages);
++	ev_window_set_action_enabled (ev_window, "dual-odd-left", has_pages);
++	ev_window_set_action_enabled (ev_window, "reload", has_pages);
++	ev_window_set_action_enabled (ev_window, "auto-scroll", has_pages);
++	ev_window_set_action_enabled (ev_window, "inverted-colors", has_pages);
+ 
+ 	/* Bookmarks menu */
+-	ev_window_set_action_sensitive (ev_window, "BookmarksAdd",
++	ev_window_set_action_enabled (ev_window, "add-bookmark",
+ 					has_pages && ev_window->priv->bookmarks);
+ 
+ 	/* Toolbar-specific actions: */
+@@ -507,62 +494,58 @@
+ 	gboolean has_pages = FALSE;
+ 	gboolean presentation_mode;
+ 	gboolean can_find_in_page = FALSE;
+-	gboolean dual_mode = FALSE;
+ 
+ 	if (ev_window->priv->document) {
+ 		page = ev_document_model_get_page (ev_window->priv->model);
+ 		n_pages = ev_document_get_n_pages (ev_window->priv->document);
+ 		has_pages = n_pages > 0;
+-		dual_mode = ev_document_model_get_dual_page (ev_window->priv->model);
+ 	}
+ 
+ 	can_find_in_page = (ev_window->priv->find_job &&
+ 			    ev_job_find_has_results (EV_JOB_FIND (ev_window->priv->find_job)));
+ 
+-	ev_window_set_action_sensitive (ev_window, "EditCopy",
++	ev_window_set_action_enabled (ev_window, "copy",
+ 					has_pages &&
+ 					ev_view_get_has_selection (view));
+-	ev_window_set_action_sensitive (ev_window, "CtrlG",
+-					has_pages && can_find_in_page);
+-	ev_window_set_action_sensitive (ev_window, "ShiftCtrlG",
+-					has_pages && can_find_in_page);
+-        ev_window_set_action_sensitive (ev_window, "F3",
+-                                        has_pages && can_find_in_page);
++	ev_window_set_action_enabled (ev_window, "find-next",
++				      has_pages && can_find_in_page);
++	ev_window_set_action_enabled (ev_window, "find-previous",
++				      has_pages && can_find_in_page);
+ 
+ 	presentation_mode = EV_WINDOW_IS_PRESENTATION (ev_window);
+ 	
+-	ev_window_set_action_sensitive (ev_window, "ViewZoomIn",
+-					has_pages &&
+-					ev_view_can_zoom_in (view) &&
+-					!presentation_mode);
+-	ev_window_set_action_sensitive (ev_window, "ViewZoomOut",
+-					has_pages &&
+-					ev_view_can_zoom_out (view) &&
+-					!presentation_mode);
+-	ev_window_set_action_sensitive (ev_window, "ViewDualOddLeft", dual_mode);
++	ev_window_set_action_enabled (ev_window, "zoom-in",
++				      has_pages &&
++				      ev_view_can_zoom_in (view) &&
++				      !presentation_mode);
++	ev_window_set_action_enabled (ev_window, "zoom-out",
++				      has_pages &&
++				      ev_view_can_zoom_out (view) &&
++				      !presentation_mode);
++	// ev_window_set_action_sensitive (ev_window, "ViewDualOddLeft", dual_mode);
+ 
+         /* Go menu */
+ 	if (has_pages) {
+-		ev_window_set_action_sensitive (ev_window, "GoPreviousPage", page > 0);
+-		ev_window_set_action_sensitive (ev_window, "GoNextPage", page < n_pages - 1);
+-		ev_window_set_action_sensitive (ev_window, "GoFirstPage", page > 0);
+-		ev_window_set_action_sensitive (ev_window, "GoLastPage", page < n_pages - 1);
+-		ev_window_set_action_sensitive (ev_window, "GoToPage", TRUE);
++		ev_window_set_action_enabled (ev_window, "go-previous-page", page > 0);
++		ev_window_set_action_enabled (ev_window, "go-next-page", page < n_pages - 1);
++		ev_window_set_action_enabled (ev_window, "go-first-page", page > 0);
++		ev_window_set_action_enabled (ev_window, "go-last-page", page < n_pages - 1);
++		ev_window_set_action_enabled (ev_window, "select-page", TRUE);
+ 	} else {
+-  		ev_window_set_action_sensitive (ev_window, "GoFirstPage", FALSE);
+-		ev_window_set_action_sensitive (ev_window, "GoPreviousPage", FALSE);
+-		ev_window_set_action_sensitive (ev_window, "GoNextPage", FALSE);
+-		ev_window_set_action_sensitive (ev_window, "GoLastPage", FALSE);
+-		ev_window_set_action_sensitive (ev_window, "GoToPage", FALSE);
++  		ev_window_set_action_enabled (ev_window, "go-first-page", FALSE);
++		ev_window_set_action_enabled (ev_window, "go-previous-page", FALSE);
++		ev_window_set_action_enabled (ev_window, "go-next-page", FALSE);
++		ev_window_set_action_enabled (ev_window, "go-last-page", FALSE);
++		ev_window_set_action_enabled (ev_window, "select-page", FALSE);
+ 	}
+ 
+ 	ev_window_set_action_sensitive (ev_window, "History",
+ 					!ev_history_is_frozen (ev_window->priv->history));
+ 
+-	ev_window_set_action_sensitive (ev_window, "F7",
+-					has_pages &&
+-					ev_view_supports_caret_navigation (view) &&
+-					!presentation_mode);
++	ev_window_set_action_enabled (ev_window, "caret-navigation",
++				      has_pages &&
++				      ev_view_supports_caret_navigation (view) &&
++				      !presentation_mode);
+ }
+ 
+ static void
+@@ -593,6 +576,8 @@
+ 	set_widget_visibility (priv->toolbar, toolbar);
+ 	set_widget_visibility (priv->find_bar, findbar);
+ 	set_widget_visibility (priv->sidebar, sidebar);
++
++	gtk_application_window_set_show_menubar (GTK_APPLICATION_WINDOW (window), !presentation);
+ }
+ 
+ static void
+@@ -892,7 +877,7 @@
+ view_selection_changed_cb (EvView   *view,
+ 			   EvWindow *window)
+ {
+-	ev_window_set_action_sensitive (window, "EditCopy",
++	ev_window_set_action_enabled (window, "copy",
+ 					ev_view_get_has_selection (view));
+ }
+ 
+@@ -1436,27 +1421,6 @@
+ }
+ #endif
+ 
+-static GSettings *
+-ev_window_ensure_settings (EvWindow *ev_window)
+-{
+-        EvWindowPrivate *priv = ev_window->priv;
+-
+-        if (priv->settings != NULL)
+-                return priv->settings;
+-
+-        priv->settings = g_settings_new (GS_SCHEMA_NAME);
+-        g_signal_connect (priv->settings,
+-                          "changed::"GS_OVERRIDE_RESTRICTIONS,
+-                          G_CALLBACK (override_restrictions_changed),
+-                          ev_window);
+-        g_signal_connect (priv->settings,
+-			  "changed::"GS_PAGE_CACHE_SIZE,
+-			  G_CALLBACK (page_cache_size_changed),
+-			  ev_window);
+-
+-        return priv->settings;
+-}
+-
+ static gboolean
+ ev_window_setup_document (EvWindow *ev_window)
+ {
+@@ -1471,8 +1435,6 @@
+ 	ev_window_title_set_document (ev_window->priv->title, document);
+ 	ev_window_title_set_uri (ev_window->priv->title, ev_window->priv->uri);
+ 
+-        ev_window_ensure_settings (ev_window);
+-
+ #ifdef HAVE_DESKTOP_SCHEMAS
+ 	if (!ev_window->priv->lockdown_settings) {
+ 		ev_window->priv->lockdown_settings = g_settings_new (GS_LOCKDOWN_SCHEMA_NAME);
+@@ -1563,8 +1525,9 @@
+ ev_window_document_changed (EvWindow *ev_window,
+ 			    gpointer  user_data)
+ {
+-	if (ev_window->priv->settings &&
+-	    g_settings_get_boolean (ev_window->priv->settings, GS_AUTO_RELOAD))
++	GSettings *settings = ev_application_get_settings (EV_APP);
++
++	if (settings && g_settings_get_boolean (settings, GS_AUTO_RELOAD))
+ 		ev_window_reload_document (ev_window, NULL);
+ }
+ 
+@@ -2410,124 +2373,10 @@
+ 	}
+ }
+ 
+-static const gchar *
+-get_settings_key_for_directory (GUserDirectory directory)
+-{
+-        switch (directory) {
+-                case G_USER_DIRECTORY_PICTURES:
+-                        return GS_LAST_PICTURES_DIRECTORY;
+-                case G_USER_DIRECTORY_DOCUMENTS:
+-                default:
+-                        return GS_LAST_DOCUMENT_DIRECTORY;
+-        }
+-}
+-
+-static void
+-ev_window_file_chooser_restore_folder (EvWindow       *window,
+-                                       GtkFileChooser *file_chooser,
+-                                       const gchar    *uri,
+-                                       GUserDirectory  directory)
+-{
+-        const gchar *folder_uri, *dir;
+-        gchar *parent_uri = NULL;
+-
+-        g_settings_get (ev_window_ensure_settings (window),
+-                        get_settings_key_for_directory (directory),
+-                        "m&s", &folder_uri);
+-        if (folder_uri == NULL && uri != NULL) {
+-                GFile *file, *parent;
+-
+-                file = g_file_new_for_uri (uri);
+-                parent = g_file_get_parent (file);
+-                g_object_unref (file);
+-                if (parent) {
+-                        folder_uri = parent_uri = g_file_get_uri (parent);
+-                        g_object_unref (parent);
+-                }
+-        }
+-
+-        if (folder_uri) {
+-                gtk_file_chooser_set_current_folder_uri (file_chooser, folder_uri);
+-        } else {
+-                dir = g_get_user_special_dir (directory);
+-                gtk_file_chooser_set_current_folder (file_chooser,
+-                                                     dir ? dir : g_get_home_dir ());
+-        }
+-
+-        g_free (parent_uri);
+-}
+-
+-static void
+-ev_window_file_chooser_save_folder (EvWindow       *window,
+-                                    GtkFileChooser *file_chooser,
+-                                    GUserDirectory  directory)
+-{
+-        gchar *uri, *folder;
+-
+-        folder = gtk_file_chooser_get_current_folder (file_chooser);
+-        if (g_strcmp0 (folder, g_get_user_special_dir (directory)) == 0) {
+-                /* Store 'nothing' if the folder is the default one */
+-                uri = NULL;
+-        } else {
+-                uri = gtk_file_chooser_get_current_folder_uri (file_chooser);
+-        }
+-        g_free (folder);
+-
+-        g_settings_set (ev_window_ensure_settings (window),
+-                        get_settings_key_for_directory (directory),
+-                        "ms", uri);
+-        g_free (uri);
+-}
+-
+-static void
+-file_open_dialog_response_cb (GtkWidget *chooser,
+-			      gint       response_id,
+-			      EvWindow  *ev_window)
+-{
+-	if (response_id == GTK_RESPONSE_OK) {
+-		GSList *uris;
+-
+-                ev_window_file_chooser_save_folder (ev_window, GTK_FILE_CHOOSER (chooser),
+-                                                    G_USER_DIRECTORY_DOCUMENTS);
+-
+-		uris = gtk_file_chooser_get_uris (GTK_FILE_CHOOSER (chooser));
+-
+-		ev_application_open_uri_list (EV_APP, uris,
+-					      gtk_window_get_screen (GTK_WINDOW (ev_window)),
+-					      gtk_get_current_event_time ());
+-
+-		g_slist_foreach (uris, (GFunc)g_free, NULL);
+-		g_slist_free (uris);
+-	}
+-
+-	gtk_widget_destroy (chooser);
+-}
+-
+ static void
+ ev_window_cmd_file_open (GtkAction *action, EvWindow *window)
+ {
+-	GtkWidget   *chooser;
+-
+-	chooser = gtk_file_chooser_dialog_new (_("Open Document"),
+-					       GTK_WINDOW (window),
+-					       GTK_FILE_CHOOSER_ACTION_OPEN,
+-					       GTK_STOCK_CANCEL,
+-					       GTK_RESPONSE_CANCEL,
+-					       GTK_STOCK_OPEN, GTK_RESPONSE_OK,
+-					       NULL);
+-
+-	ev_document_factory_add_filters (chooser, NULL);
+-	gtk_file_chooser_set_select_multiple (GTK_FILE_CHOOSER (chooser), TRUE);
+-	gtk_file_chooser_set_local_only (GTK_FILE_CHOOSER (chooser), FALSE);
+-
+-        ev_window_file_chooser_restore_folder (window, GTK_FILE_CHOOSER (chooser),
+-                                               NULL, G_USER_DIRECTORY_DOCUMENTS);
+-
+-	g_signal_connect (chooser, "response",
+-			  G_CALLBACK (file_open_dialog_response_cb),
+-			  window);
+-
+-	gtk_widget_show (chooser);
++	ev_application_open (EV_APP);
+ }
+ 
+ static void
+@@ -2545,26 +2394,13 @@
+ }
+ 
+ static void
+-ev_window_cmd_file_open_copy (GtkAction *action, EvWindow *window)
++ev_window_activate_open_copy_action (GSimpleAction *action,
++				     GVariant      *parameter,
++				     gpointer       user_data)
+ {
+-	ev_window_open_copy_at_dest (window, NULL);
+-}
++	EvWindow *window = user_data;
+ 
+-static void
+-ev_window_cmd_recent_file_activate (GtkAction *action,
+-				    EvWindow  *window)
+-{
+-	GtkRecentInfo *info;
+-	const gchar   *uri;
+-
+-	info = g_object_get_data (G_OBJECT (action), "gtk-recent-info");
+-	g_assert (info != NULL);
+-	
+-	uri = gtk_recent_info_get_uri (info);
+-	
+-	ev_application_open_uri_at_dest (EV_APP, uri,
+-					 gtk_window_get_screen (GTK_WINDOW (window)),
+-					 NULL, 0, NULL, gtk_get_current_event_time ());
++	ev_window_open_copy_at_dest (window, NULL);
+ }
+ 
+ static void
+@@ -2583,185 +2419,6 @@
+ 	gtk_recent_manager_add_item (window->priv->recent_manager, filename);
+ }
+ 
+-static gint
+-compare_recent_items (GtkRecentInfo *a, GtkRecentInfo *b)
+-{
+-	gboolean     has_ev_a, has_ev_b;
+-	const gchar *evince = g_get_application_name ();
+-
+-	has_ev_a = gtk_recent_info_has_application (a, evince);
+-	has_ev_b = gtk_recent_info_has_application (b, evince);
+-	
+-	if (has_ev_a && has_ev_b) {
+-		time_t time_a, time_b;
+-
+-		time_a = gtk_recent_info_get_modified (a);
+-		time_b = gtk_recent_info_get_modified (b);
+-
+-		return (time_b - time_a);
+-	} else if (has_ev_a) {
+-		return -1;
+-	} else if (has_ev_b) {
+-		return 1;
+-	}
+-
+-	return 0;
+-}
+-
+-/*
+- * Doubles underscore to avoid spurious menu accels.
+- */
+-static gchar * 
+-ev_window_get_recent_file_label (gint index, const gchar *filename)
+-{
+-	GString *str;
+-	gint length;
+-	const gchar *p;
+-	const gchar *end;
+-	gboolean is_rtl;
+-	
+-	is_rtl = (gtk_widget_get_default_direction () == GTK_TEXT_DIR_RTL);
+-
+-	g_return_val_if_fail (filename != NULL, NULL);
+-	
+-	length = strlen (filename);
+-	str = g_string_sized_new (length + 10);
+-	g_string_printf (str, "%s_%d.  ", is_rtl ? "\xE2\x80\x8F" : "", index);
+-
+-	p = filename;
+-	end = filename + length;
+- 
+-	while (p != end) {
+-		const gchar *next;
+-		next = g_utf8_next_char (p);
+- 
+-		switch (*p) {
+-			case '_':
+-				g_string_append (str, "__");
+-				break;
+-			default:
+-				g_string_append_len (str, p, next - p);
+-				break;
+-		}
+- 
+-		p = next;
+-	}
+- 
+-	return g_string_free (str, FALSE);
+-}
+-
+-static void
+-ev_window_recent_action_connect_proxy_cb (GtkActionGroup *action_group,
+-                                          GtkAction *action,
+-                                          GtkWidget *proxy,
+-                                          gpointer data)
+-{
+-        GtkLabel *label;
+-
+-        if (!GTK_IS_MENU_ITEM (proxy))
+-                return;
+-
+-        label = GTK_LABEL (gtk_bin_get_child (GTK_BIN (proxy)));
+-
+-        gtk_label_set_ellipsize (label, PANGO_ELLIPSIZE_MIDDLE);
+-        gtk_label_set_max_width_chars (label, MAX_RECENT_ITEM_LEN);
+-}
+-
+-static void
+-ev_window_setup_recent (EvWindow *ev_window)
+-{
+-	GList        *items, *l;
+-	guint         n_items = 0;
+-	const gchar  *evince = g_get_application_name ();
+-	static guint  i = 0;
+-
+-	if (ev_window->priv->recent_ui_id > 0) {
+-		gtk_ui_manager_remove_ui (ev_window->priv->ui_manager,
+-					  ev_window->priv->recent_ui_id);
+-		gtk_ui_manager_ensure_update (ev_window->priv->ui_manager);
+-	}
+-	ev_window->priv->recent_ui_id = gtk_ui_manager_new_merge_id (ev_window->priv->ui_manager);
+-
+-	if (ev_window->priv->recent_action_group) {
+-		gtk_ui_manager_remove_action_group (ev_window->priv->ui_manager,
+-						    ev_window->priv->recent_action_group);
+-		g_object_unref (ev_window->priv->recent_action_group);
+-	}
+-	ev_window->priv->recent_action_group = gtk_action_group_new ("RecentFilesActions");
+-        g_signal_connect (ev_window->priv->recent_action_group, "connect-proxy",
+-                          G_CALLBACK (ev_window_recent_action_connect_proxy_cb), NULL);
+-
+-	gtk_ui_manager_insert_action_group (ev_window->priv->ui_manager,
+-					    ev_window->priv->recent_action_group, -1);
+-
+-	items = gtk_recent_manager_get_items (ev_window->priv->recent_manager);
+-	items = g_list_sort (items, (GCompareFunc) compare_recent_items);
+-
+-	for (l = items; l && l->data; l = g_list_next (l)) {
+-		GtkRecentInfo *info;
+-		GtkAction     *action;
+-		gchar         *action_name;
+-		gchar         *label;
+-                const gchar   *mime_type;
+-                gchar         *content_type;
+-                GIcon         *icon = NULL;
+-
+-		info = (GtkRecentInfo *) l->data;
+-
+-		if (!gtk_recent_info_has_application (info, evince))
+-			continue;
+-
+-		action_name = g_strdup_printf ("RecentFile%u", i++);
+-		label = ev_window_get_recent_file_label (
+-			n_items + 1, gtk_recent_info_get_display_name (info));
+-
+-                mime_type = gtk_recent_info_get_mime_type (info);
+-                content_type = g_content_type_from_mime_type (mime_type);
+-                if (content_type != NULL) {
+-                        icon = g_content_type_get_icon (content_type);
+-                        g_free (content_type);
+-                }
+-
+-		action = g_object_new (GTK_TYPE_ACTION,
+-				       "name", action_name,
+-				       "label", label,
+-                                       "gicon", icon,
+-                                       "always-show-image", TRUE,
+-				       NULL);
+-
+-		g_object_set_data_full (G_OBJECT (action),
+-					"gtk-recent-info",
+-					gtk_recent_info_ref (info),
+-					(GDestroyNotify) gtk_recent_info_unref);
+-		
+-		g_signal_connect (action, "activate",
+-				  G_CALLBACK (ev_window_cmd_recent_file_activate),
+-				  (gpointer) ev_window);
+-
+-		gtk_action_group_add_action (ev_window->priv->recent_action_group,
+-					     action);
+-		g_object_unref (action);
+-
+-		gtk_ui_manager_add_ui (ev_window->priv->ui_manager,
+-				       ev_window->priv->recent_ui_id,
+-				       "/ActionMenu/RecentFilesMenu/RecentFiles",
+-				       label,
+-				       action_name,
+-				       GTK_UI_MANAGER_MENUITEM,
+-				       FALSE);
+-		g_free (action_name);
+-		g_free (label);
+-                if (icon != NULL)
+-                        g_object_unref (icon);
+-
+-		if (++n_items == 5)
+-			break;
+-	}
+-	
+-	g_list_foreach (items, (GFunc) gtk_recent_info_unref, NULL);
+-	g_list_free (items);
+-}
+-
+ static gboolean 
+ show_saving_progress (GFile *dst)
+ {
+@@ -2952,8 +2609,8 @@
+ 		return;
+ 	}
+ 
+-        ev_window_file_chooser_save_folder (ev_window, GTK_FILE_CHOOSER (fc),
+-                                            G_USER_DIRECTORY_DOCUMENTS);
++	ev_file_chooser_save_folder (GTK_FILE_CHOOSER (fc),
++				     G_USER_DIRECTORY_DOCUMENTS);
+ 
+ 	uri = gtk_file_chooser_get_uri (GTK_FILE_CHOOSER (fc));
+ 
+@@ -2975,7 +2632,7 @@
+ }
+ 
+ static void
+-ev_window_cmd_save_as (GtkAction *action, EvWindow *ev_window)
++ev_window_save_copy (EvWindow *ev_window)
+ {
+ 	GtkWidget *fc;
+ 	gchar *base_name;
+@@ -3003,9 +2660,9 @@
+ 	g_object_unref (file);
+ 	g_free (base_name);
+ 
+-        ev_window_file_chooser_restore_folder (ev_window, GTK_FILE_CHOOSER (fc),
+-                                               ev_window->priv->uri,
+-                                               G_USER_DIRECTORY_DOCUMENTS);
++	ev_file_chooser_restore_folder (GTK_FILE_CHOOSER (fc),
++					ev_window->priv->uri,
++					G_USER_DIRECTORY_DOCUMENTS);
+ 
+ 	g_signal_connect (fc, "response",
+ 			  G_CALLBACK (file_save_dialog_response_cb),
+@@ -3015,9 +2672,21 @@
+ }
+ 
+ static void
+-ev_window_cmd_send_to (GtkAction *action,
+-		       EvWindow  *ev_window)
++ev_window_activate_save_copy_action (GSimpleAction *action,
++				     GVariant      *parameter,
++				     gpointer       user_data)
++{
++	EvWindow *window = user_data;
++
++	ev_window_save_copy (window);
++}
++
++static void
++ev_window_activate_send_to_action (GSimpleAction *action,
++				   GVariant      *parameter,
++				   gpointer       user_data)
+ {
++	EvWindow   *ev_window = user_data;
+ 	GAppInfo   *app_info;
+ 	gchar      *command;
+ 	const char *uri;
+@@ -3052,8 +2721,11 @@
+ }
+ 
+ static void
+-ev_window_cmd_open_containing_folder (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_open_containing_folder_action (GSimpleAction *action,
++						  GVariant      *parameter,
++						  gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
+ 	GtkWidget *ev_window_widget;
+ 	GFile *file;
+ 	GFile *parent;
+@@ -3589,14 +3261,22 @@
+ }
+ 
+ static void
+-ev_window_cmd_file_print (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_print_action (GSimpleAction *action,
++				 GVariant      *state,
++				 gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
++
+ 	ev_window_print (ev_window);
+ }
+ 
+ static void
+-ev_window_cmd_file_properties (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_show_properties_action (GSimpleAction *action,
++					   GVariant      *state,
++					   gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
++
+ 	if (ev_window->priv->properties == NULL) {
+ 		ev_window->priv->properties = ev_properties_dialog_new ();
+ 		ev_properties_dialog_set_document (EV_PROPERTIES_DIALOG (ev_window->priv->properties),
+@@ -3622,7 +3302,7 @@
+ 
+ 	switch (response) {
+ 	case GTK_RESPONSE_YES:
+-		ev_window_cmd_save_as (NULL, ev_window);
++		ev_window_save_copy (ev_window);
+ 		break;
+ 	case GTK_RESPONSE_NO:
+ 		gtk_widget_destroy (GTK_WIDGET (ev_window));
+@@ -3823,64 +3503,86 @@
+ }
+ 
+ static void
+-ev_window_cmd_file_close_window (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_close_action (GSimpleAction *action,
++				 GVariant      *parameter,
++				 gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
++
+ 	if (ev_window_close (ev_window))
+ 		gtk_widget_destroy (GTK_WIDGET (ev_window));
+ }
+ 
+ static void
+-ev_window_cmd_focus_page_selector (GtkAction *act, EvWindow *window)
++ev_window_activate_select_page_action (GSimpleAction *action,
++				       GVariant      *parameter,
++				       gpointer       user_data)
+ {
+-	GtkAction *action;
+-	
++	EvWindow *window = user_data;
++	GtkAction *page_action;
++
+ 	update_chrome_flag (window, EV_CHROME_RAISE_TOOLBAR, TRUE);
+ 	update_chrome_visibility (window);
+-	
+-	action = gtk_action_group_get_action (window->priv->action_group,
+-				     	      PAGE_SELECTOR_ACTION);
+-	ev_page_action_grab_focus (EV_PAGE_ACTION (action));
++
++	page_action = gtk_action_group_get_action (window->priv->action_group,
++						   PAGE_SELECTOR_ACTION);
++	ev_page_action_grab_focus (EV_PAGE_ACTION (page_action));
+ }
+ 
+ static void
+-ev_window_cmd_scroll_forward (GtkAction *action, EvWindow *window)
++ev_window_activate_scroll_forward_action (GSimpleAction *action,
++					  GVariant      *parameter,
++					  gpointer       user_data)
+ {
++	EvWindow *window = user_data;
++
+ 	g_signal_emit_by_name (window->priv->view, "scroll", GTK_SCROLL_PAGE_FORWARD, GTK_ORIENTATION_VERTICAL);
+ }
+ 
+ static void
+-ev_window_cmd_scroll_backward (GtkAction *action, EvWindow *window)
++ev_window_activate_scroll_backwards_action (GSimpleAction *action,
++					    GVariant      *parameter,
++					    gpointer       user_data)
+ {
++	EvWindow *window = user_data;
++
+ 	g_signal_emit_by_name (window->priv->view, "scroll", GTK_SCROLL_PAGE_BACKWARD, GTK_ORIENTATION_VERTICAL);
+ }
+ 
+ static void
+-ev_window_cmd_continuous (GtkAction *action, EvWindow *ev_window)
++ev_window_change_continuous_action_state (GSimpleAction *action,
++					  GVariant      *state,
++					  gpointer       user_data)
+ {
+-	gboolean continuous;
++	EvWindow *window = user_data;
+ 
+-	ev_window_stop_presentation (ev_window, TRUE);
+-	continuous = gtk_toggle_action_get_active (GTK_TOGGLE_ACTION (action));
+-	ev_document_model_set_continuous (ev_window->priv->model, continuous);
++	ev_window_stop_presentation (window, TRUE);
++	ev_document_model_set_continuous (window->priv->model, g_variant_get_boolean (state));
++	g_simple_action_set_state (action, state);
+ }
+ 
+ static void
+-ev_window_cmd_dual (GtkAction *action, EvWindow *ev_window)
++ev_window_change_dual_page_action_state (GSimpleAction *action,
++					 GVariant      *state,
++					 gpointer       user_data)
+ {
+-	gboolean dual_page;
++	EvWindow *window = user_data;
+ 
+-	ev_window_stop_presentation (ev_window, TRUE);
+-	dual_page = gtk_toggle_action_get_active (GTK_TOGGLE_ACTION (action));
+-	ev_document_model_set_dual_page (ev_window->priv->model, dual_page);
++	ev_window_stop_presentation (window, TRUE);
++	ev_document_model_set_dual_page (window->priv->model, g_variant_get_boolean (state));
++	g_simple_action_set_state (action, state);
+ }
+ 
+ static void
+-ev_window_cmd_dual_odd_pages_left (GtkAction *action, EvWindow *ev_window)
++ev_window_change_dual_odd_left_action_state (GSimpleAction *action,
++					     GVariant      *state,
++					     gpointer       user_data)
+ {
+-	gboolean dual_page_odd_left;
++	EvWindow *window = user_data;
+ 
+-	dual_page_odd_left = gtk_toggle_action_get_active (GTK_TOGGLE_ACTION (action));
+-	ev_document_model_set_dual_page_odd_pages_left (ev_window->priv->model, dual_page_odd_left);
++	ev_document_model_set_dual_page_odd_pages_left (window->priv->model,
++							g_variant_get_boolean (state));
++	g_simple_action_set_state (action, state);
+ }
+ 
+ static void
+@@ -3897,9 +3599,27 @@
+ }
+ 
+ static void
+-ev_window_cmd_fit_page (GtkAction *action, EvWindow *ev_window)
+-{
+-	ev_document_model_set_sizing_mode (ev_window->priv->model, EV_SIZING_FIT_PAGE);
++ev_window_change_sizing_mode_action_state (GSimpleAction *action,
++					   GVariant      *state,
++					   gpointer       user_data)
++{
++	EvWindow *window = user_data;
++	const gchar *mode;
++
++	mode = g_variant_get_string (state, NULL);
++
++	if (g_str_equal (mode, "fit-page"))
++		ev_document_model_set_sizing_mode (window->priv->model, EV_SIZING_FIT_PAGE);
++	else if (g_str_equal (mode, "fit-width"))
++		ev_document_model_set_sizing_mode (window->priv->model, EV_SIZING_FIT_WIDTH);
++	else if (g_str_equal (mode, "automatic"))
++		ev_document_model_set_sizing_mode (window->priv->model, EV_SIZING_AUTOMATIC);
++	else if (g_str_equal (mode, "free"))
++		ev_document_model_set_sizing_mode (window->priv->model, EV_SIZING_FREE);
++	else
++		g_assert_not_reached ();
++
++	g_simple_action_set_state (action, state);
+ }
+ 
+ static void
+@@ -3916,12 +3636,6 @@
+ }
+ 
+ static void
+-ev_window_cmd_fit_width (GtkAction *action, EvWindow *ev_window)
+-{
+-	ev_document_model_set_sizing_mode (ev_window->priv->model, EV_SIZING_FIT_WIDTH);
+-}
+-
+-static void
+ ev_window_cmd_view_zoom_automatic (GtkAction *action,
+ 				   EvWindow  *ev_window)
+ {
+@@ -3957,29 +3671,28 @@
+ }
+ 
+ static void
+-ev_window_cmd_edit_select_all (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_select_all_action (GSimpleAction *action,
++				      GVariant      *parameter,
++				      gpointer       user_data)
+ {
+-	g_return_if_fail (EV_IS_WINDOW (ev_window));
++	EvWindow *ev_window = user_data;
+ 
+ 	ev_view_select_all (EV_VIEW (ev_window->priv->view));
+ }
+ 
+ static void
+-ev_window_cmd_toggle_find (GtkAction *action, EvWindow *ev_window)
++ev_window_change_find_action_state (GSimpleAction *action,
++				    GVariant      *state,
++				    gpointer       user_data)
+ {
+-	gboolean show_find_bar;
++	EvWindow *ev_window = user_data;
+ 
+-	show_find_bar = gtk_toggle_action_get_active (GTK_TOGGLE_ACTION (action));
+-	if (show_find_bar)
++	if (g_variant_get_boolean (state))
+ 		ev_window_show_find_bar (ev_window);
+ 	else
+ 		ev_window_close_find_bar (ev_window);
+-}
+ 
+-static void
+-ev_window_cmd_edit_find (GtkAction *action, EvWindow *ev_window)
+-{
+-	ev_window_show_find_bar (ev_window);
++	g_simple_action_set_state (action, state);
+ }
+ 
+ static void
+@@ -4004,8 +3717,11 @@
+ }
+ 
+ static void
+-ev_window_cmd_edit_find_next (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_find_next_action (GSimpleAction *action,
++				     GVariant      *parameter,
++				     gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
+ 	gboolean find_bar_hidden;
+ 
+ 	if (EV_WINDOW_IS_PRESENTATION (ev_window))
+@@ -4029,8 +3745,11 @@
+ }
+ 
+ static void
+-ev_window_cmd_edit_find_previous (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_find_previous_action (GSimpleAction *action,
++					 GVariant      *parameter,
++					 gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
+ 	gboolean find_bar_hidden;
+ 
+ 	if (EV_WINDOW_IS_PRESENTATION (ev_window))
+@@ -4047,9 +3766,11 @@
+ }
+ 
+ static void
+-ev_window_cmd_edit_copy (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_copy_action (GSimpleAction *action,
++				GVariant      *parameter,
++				gpointer       user_data)
+ {
+-        g_return_if_fail (EV_IS_WINDOW (ev_window));
++	EvWindow *ev_window = user_data;
+ 
+ 	ev_view_copy (EV_VIEW (ev_window->priv->view));
+ }
+@@ -4067,15 +3788,12 @@
+ static void
+ ev_window_update_fullscreen_action (EvWindow *window)
+ {
+-	GtkAction *action;
++	GAction *action;
++	gboolean fullscreen;
+ 
+-	action = gtk_action_group_get_action (window->priv->action_group, "ViewFullscreen");
+-	g_signal_handlers_block_by_func
+-		(action, G_CALLBACK (ev_window_cmd_view_fullscreen), window);
+-	gtk_toggle_action_set_active (GTK_TOGGLE_ACTION (action),
+-				      ev_document_model_get_fullscreen (window->priv->model));
+-	g_signal_handlers_unblock_by_func
+-		(action, G_CALLBACK (ev_window_cmd_view_fullscreen), window);
++	action = g_action_map_lookup_action (G_ACTION_MAP (window), "fullscreen");
++	fullscreen = ev_document_model_get_fullscreen (window->priv->model);
++	g_simple_action_set_state (G_SIMPLE_ACTION (action), g_variant_new_boolean (fullscreen));
+ }
+ 
+ static void
+@@ -4292,16 +4010,19 @@
+ }
+ 
+ static void
+-ev_window_cmd_view_fullscreen (GtkAction *action, EvWindow *window)
++ev_window_change_fullscreen_action_state (GSimpleAction *action,
++					  GVariant      *state,
++					  gpointer       user_data)
+ {
+-	gboolean fullscreen;
++	EvWindow *window = user_data;
+ 
+-	fullscreen = gtk_toggle_action_get_active (GTK_TOGGLE_ACTION (action));
+-	if (fullscreen) {
++	if (g_variant_get_boolean (state)) {
+ 		ev_window_run_fullscreen (window);
+ 	} else {
+ 		ev_window_stop_fullscreen (window, TRUE);
+ 	}
++
++	g_simple_action_set_state (action, state);
+ }
+ 
+ static void
+@@ -4336,15 +4057,11 @@
+ static void
+ ev_window_update_presentation_action (EvWindow *window)
+ {
+-	GtkAction *action;
++	GAction *action;
+ 
+-	action = gtk_action_group_get_action (window->priv->action_group, "ViewPresentation");
+-	g_signal_handlers_block_by_func
+-		(action, G_CALLBACK (ev_window_cmd_view_presentation), window);
+-	gtk_toggle_action_set_active (GTK_TOGGLE_ACTION (action),
+-				      EV_WINDOW_IS_PRESENTATION (window));
+-	g_signal_handlers_unblock_by_func
+-		(action, G_CALLBACK (ev_window_cmd_view_presentation), window);
++	action = g_action_map_lookup_action (G_ACTION_MAP (window), "presentation");
++	g_simple_action_set_state (G_SIMPLE_ACTION (action),
++				   g_variant_new_boolean (EV_WINDOW_IS_PRESENTATION (window)));
+ }
+ 
+ static void
+@@ -4459,14 +4176,17 @@
+ }
+ 
+ static void
+-ev_window_cmd_view_presentation (GtkAction *action, EvWindow *window)
++ev_window_change_presentation_action_state (GSimpleAction *action,
++					    GVariant      *state,
++					    gpointer       user_data)
+ {
+-	gboolean presentation;
++	EvWindow *window = user_data;
+ 
+-	presentation = gtk_toggle_action_get_active (GTK_TOGGLE_ACTION (action));
+-	if (presentation) {
++	if (g_variant_get_boolean (state)) {
+ 		ev_window_run_presentation (window);
+ 	}
++
++	g_simple_action_set_state (action, state);
+ }
+ 
+ static gboolean
+@@ -4530,10 +4250,12 @@
+ 	ev_window_update_actions_sensitivity (window);
+ }
+ 
+-
+ static void
+-ev_window_cmd_edit_rotate_left (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_rotate_left_action (GSimpleAction *action,
++				       GVariant      *parameter,
++				       gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
+ 	gint rotation;
+ 
+ 	if (EV_WINDOW_IS_PRESENTATION (ev_window)) {
+@@ -4548,8 +4270,11 @@
+ }
+ 
+ static void
+-ev_window_cmd_edit_rotate_right (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_rotate_right_action (GSimpleAction *action,
++					GVariant      *parameter,
++					gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
+ 	gint rotation;
+ 
+ 	if (EV_WINDOW_IS_PRESENTATION (ev_window)) {
+@@ -4564,16 +4289,23 @@
+ }
+ 
+ static void
+-ev_window_cmd_view_inverted_colors (GtkAction *action, EvWindow *ev_window)
++ev_window_change_inverted_colors_action_state (GSimpleAction *action,
++					       GVariant      *state,
++					       gpointer       user_data)
+ {
+-	gboolean inverted_colors = ev_document_model_get_inverted_colors (ev_window->priv->model);
++	EvWindow *ev_window = user_data;
+ 
+-	ev_document_model_set_inverted_colors (ev_window->priv->model, !inverted_colors);
++	ev_document_model_set_inverted_colors (ev_window->priv->model,
++					       g_variant_get_boolean (state));
++	g_simple_action_set_state (action, state);
+ }
+ 
+ static void
+-ev_window_cmd_edit_save_settings (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_save_settings_action (GSimpleAction *action,
++					 GVariant      *state,
++					 gpointer       user_data)
+ {
++	EvWindow        *ev_window = user_data;
+ 	EvWindowPrivate *priv = ev_window->priv;
+ 	EvDocumentModel *model = priv->model;
+ 	GSettings       *settings = priv->default_settings;
+@@ -4582,7 +4314,7 @@
+ 	g_settings_set_boolean (settings, "continuous",
+ 				ev_document_model_get_continuous (model));
+ 	g_settings_set_boolean (settings, "dual-page",
+-				ev_document_model_get_dual_page (model));
++        			ev_document_model_get_dual_page (model));
+ 	g_settings_set_boolean (settings, "dual-page-odd-left",
+ 				ev_document_model_get_dual_page_odd_pages_left (model));
+ 	g_settings_set_boolean (settings, "fullscreen",
+@@ -4607,59 +4339,78 @@
+ }
+ 
+ static void
+-ev_window_cmd_view_zoom_in (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_zoom_in_action (GSimpleAction *action,
++				   GVariant      *parameter,
++				   gpointer       user_data)
+ {
+-        g_return_if_fail (EV_IS_WINDOW (ev_window));
++	EvWindow *ev_window = user_data;
++
++	g_return_if_fail (EV_IS_WINDOW (ev_window));
+ 
+ 	ev_document_model_set_sizing_mode (ev_window->priv->model, EV_SIZING_FREE);
+ 	ev_view_zoom_in (EV_VIEW (ev_window->priv->view));
+ }
+ 
+ static void
+-ev_window_cmd_view_zoom_out (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_zoom_out_action (GSimpleAction *action,
++				    GVariant      *parameter,
++				    gpointer       user_data)
+ {
+-        g_return_if_fail (EV_IS_WINDOW (ev_window));
++	EvWindow *ev_window = user_data;
++
++	g_return_if_fail (EV_IS_WINDOW (ev_window));
+ 
+ 	ev_document_model_set_sizing_mode (ev_window->priv->model, EV_SIZING_FREE);
+ 	ev_view_zoom_out (EV_VIEW (ev_window->priv->view));
+ }
+ 
+ static void
+-ev_window_cmd_go_previous_page (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_go_previous_page_action (GSimpleAction *action,
++					    GVariant      *parameter,
++					    gpointer       user_data)
+ {
+-        g_return_if_fail (EV_IS_WINDOW (ev_window));
++	EvWindow *window = user_data;
+ 
+-	ev_view_previous_page (EV_VIEW (ev_window->priv->view));
++	ev_view_previous_page (EV_VIEW (window->priv->view));
+ }
+ 
+ static void
+-ev_window_cmd_go_next_page (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_go_next_page_action (GSimpleAction *action,
++					GVariant      *parameter,
++					gpointer       user_data)
+ {
+-        g_return_if_fail (EV_IS_WINDOW (ev_window));
++	EvWindow *window = user_data;
+ 
+-	ev_view_next_page (EV_VIEW (ev_window->priv->view));
++	ev_view_next_page (EV_VIEW (window->priv->view));
+ }
+ 
+ static void
+-ev_window_cmd_go_first_page (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_go_first_page_action (GSimpleAction *action,
++					 GVariant      *parameter,
++					 gpointer       user_data)
+ {
+-        g_return_if_fail (EV_IS_WINDOW (ev_window));
++	EvWindow *window = user_data;
+ 
+-	ev_document_model_set_page (ev_window->priv->model, 0);
++	ev_document_model_set_page (window->priv->model, 0);
+ }
+ 
+ static void
+-ev_window_cmd_go_last_page (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_go_last_page_action (GSimpleAction *action,
++					GVariant      *parameter,
++					gpointer       user_data)
+ {
+-        g_return_if_fail (EV_IS_WINDOW (ev_window));
++	EvWindow *window = user_data;
+ 
+-	ev_document_model_set_page (ev_window->priv->model,
+-				    ev_document_get_n_pages (ev_window->priv->document) - 1);
++	ev_document_model_set_page (window->priv->model,
++				    ev_document_get_n_pages (window->priv->document) - 1);
+ }
+ 
+ static void
+-ev_window_cmd_go_forward (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_go_forward_action (GSimpleAction *action,
++				      GVariant      *parameter,
++				      gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
+ 	int n_pages, current_page;
+ 	
+         g_return_if_fail (EV_IS_WINDOW (ev_window));
+@@ -4673,11 +4424,14 @@
+ }
+ 
+ static void
+-ev_window_cmd_go_backward (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_go_backward_action (GSimpleAction *action,
++				       GVariant      *parameter,
++				       gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
+ 	int current_page;
+-	
+-        g_return_if_fail (EV_IS_WINDOW (ev_window));
++
++	g_return_if_fail (EV_IS_WINDOW (ev_window));
+ 
+ 	current_page = ev_document_model_get_page (ev_window->priv->model);
+ 	
+@@ -4686,15 +4440,6 @@
+ 	}
+ }
+ 
+-static void
+-ev_window_cmd_bookmark_activate (GtkAction *action,
+-				 EvWindow  *window)
+-{
+-	guint page = ev_bookmark_action_get_page (EV_BOOKMARK_ACTION (action));
+-
+-	ev_document_model_set_page (window->priv->model, page);
+-}
+-
+ static gint
+ compare_bookmarks (EvBookmark *a,
+ 		   EvBookmark *b)
+@@ -4705,59 +4450,33 @@
+ static void
+ ev_window_setup_bookmarks (EvWindow *window)
+ {
+-	GList *items, *l;
++	GList *items, *it;
+ 
+-	if (!window->priv->bookmarks)
+-		return;
++	g_menu_remove_all (window->priv->bookmarks_menu);
+ 
+-	if (window->priv->bookmarks_ui_id > 0) {
+-		gtk_ui_manager_remove_ui (window->priv->ui_manager,
+-					  window->priv->bookmarks_ui_id);
+-		gtk_ui_manager_ensure_update (window->priv->ui_manager);
+-	}
+-	window->priv->bookmarks_ui_id = gtk_ui_manager_new_merge_id (window->priv->ui_manager);
++	items = g_list_sort (ev_bookmarks_get_bookmarks (window->priv->bookmarks),
++			     (GCompareFunc) compare_bookmarks);
+ 
+-	if (window->priv->bookmarks_action_group) {
+-		gtk_ui_manager_remove_action_group (window->priv->ui_manager,
+-						    window->priv->bookmarks_action_group);
+-		g_object_unref (window->priv->bookmarks_action_group);
+-	}
+-	window->priv->bookmarks_action_group = gtk_action_group_new ("BookmarksActions");
+-	gtk_ui_manager_insert_action_group (window->priv->ui_manager,
+-					    window->priv->bookmarks_action_group, -1);
++	for (it = items; it; it = it->next) {
++		EvBookmark *bookmark = it->data;
++		GMenuItem *item;
+ 
+-	items = ev_bookmarks_get_bookmarks (window->priv->bookmarks);
+-	items = g_list_sort (items, (GCompareFunc)compare_bookmarks);
++		item = g_menu_item_new (bookmark->title, NULL);
++		g_menu_item_set_action_and_target (item, "win.goto-bookmark", "u", bookmark->page);
++		g_menu_append_item (window->priv->bookmarks_menu, item);
+ 
+-	for (l = items; l && l->data; l = g_list_next (l)) {
+-		EvBookmark *bm = (EvBookmark *)l->data;
+-		GtkAction  *action;
+-
+-		action = ev_bookmark_action_new (bm);
+-		g_signal_connect (action, "activate",
+-				  G_CALLBACK (ev_window_cmd_bookmark_activate),
+-				  window);
+-		gtk_action_group_add_action (window->priv->bookmarks_action_group,
+-					     action);
+-
+-		gtk_ui_manager_add_ui (window->priv->ui_manager,
+-				       window->priv->bookmarks_ui_id,
+-				       "/ActionMenu/BookmarksMenu/BookmarksItems",
+-				       gtk_action_get_label (action),
+-				       gtk_action_get_name (action),
+-				       GTK_UI_MANAGER_MENUITEM,
+-				       FALSE);
+-
+-		g_object_unref (action);
++		g_object_unref (item);
+ 	}
+ 
+ 	g_list_free (items);
+ }
+ 
+ static void
+-ev_window_cmd_bookmarks_add (GtkAction *action,
+-			     EvWindow  *window)
++ev_window_activate_add_bookmark_action (GSimpleAction *action,
++					GVariant      *parameter,
++					gpointer       user_data)
+ {
++	EvWindow *window = user_data;
+ 	EvBookmark bm;
+ 	gchar     *page_label;
+ 
+@@ -4771,32 +4490,41 @@
+ }
+ 
+ static void
+-ev_window_cmd_view_reload (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_goto_bookmark_action (GSimpleAction *action,
++					 GVariant      *parameter,
++					 gpointer       user_data)
+ {
+-	ev_window_reload_document (ev_window, NULL);
+-}
++	EvWindow *window = user_data;
+ 
+-static void
+-ev_window_cmd_view_autoscroll (GtkAction *action, EvWindow *ev_window)
+-{
+-	ev_view_autoscroll_start (EV_VIEW (ev_window->priv->view));
++	ev_document_model_set_page (window->priv->model, g_variant_get_uint32 (parameter));
+ }
+ 
+ static void
+-ev_window_cmd_leave_fullscreen (GtkAction *action, EvWindow *window)
++ev_window_activate_reload_action (GSimpleAction *action,
++				  GVariant      *parameter,
++				  gpointer       user_data)
+ {
+-	ev_window_stop_fullscreen (window, TRUE);
++	EvWindow *ev_window = user_data;
++
++	ev_window_reload_document (ev_window, NULL);
+ }
+ 
+ static void
+-ev_window_cmd_start_presentation (GtkAction *action, EvWindow *window)
++ev_window_activate_auto_scroll_action (GSimpleAction *action,
++				       GVariant      *parameter,
++				       gpointer       user_data)
+ {
+-	ev_window_run_presentation (window);
++	EvWindow *ev_window = user_data;
++
++	ev_view_autoscroll_start (EV_VIEW (ev_window->priv->view));
+ }
+ 
+ static void
+-ev_window_cmd_escape (GtkAction *action, EvWindow *window)
++ev_window_activate_escape_action (GSimpleAction *action,
++				  GVariant      *parameter,
++				  gpointer       user_data)
+ {
++	EvWindow *window = user_data;
+ 	ev_view_autoscroll_stop (EV_VIEW (window->priv->view));
+ 
+ 	if (gtk_widget_get_visible (window->priv->find_bar))
+@@ -4890,29 +4618,20 @@
+ }
+ 
+ static void
+-ev_window_update_continuous_action (EvWindow *window)
+-{
+-	GtkAction *action;
+-
+-	action = gtk_action_group_get_action (window->priv->action_group, "ViewContinuous");
+-	g_signal_handlers_block_by_func
+-		(action, G_CALLBACK (ev_window_cmd_continuous), window);
+-	gtk_toggle_action_set_active (GTK_TOGGLE_ACTION (action),
+-				      ev_document_model_get_continuous (window->priv->model));
+-	g_signal_handlers_unblock_by_func
+-		(action, G_CALLBACK (ev_window_cmd_continuous), window);
+-}
+-
+-static void
+ ev_window_continuous_changed_cb (EvDocumentModel *model,
+ 				 GParamSpec      *pspec,
+ 				 EvWindow        *ev_window)
+ {
+-	ev_window_update_continuous_action (ev_window);
++	gboolean continuous;
++	GAction *action;
++
++	continuous = ev_document_model_get_continuous (model);
++
++	action = g_action_map_lookup_action (G_ACTION_MAP (ev_window), "continuous");
++	g_simple_action_set_state (G_SIMPLE_ACTION (action), g_variant_new_boolean (continuous));
+ 
+ 	if (ev_window->priv->metadata && !ev_window_is_empty (ev_window))
+-		ev_metadata_set_boolean (ev_window->priv->metadata, "continuous",
+-					 ev_document_model_get_continuous (model));
++		ev_metadata_set_boolean (ev_window->priv->metadata, "continuous", continuous);
+ }
+ 
+ static void
+@@ -4930,27 +4649,16 @@
+ }
+ 
+ static void
+-ev_window_update_inverted_colors_action (EvWindow *window)
+-{
+-	GtkAction *action;
+-
+-	action = gtk_action_group_get_action (window->priv->action_group, "ViewInvertedColors");
+-	g_signal_handlers_block_by_func
+-		(action, G_CALLBACK (ev_window_cmd_view_inverted_colors), window);
+-	gtk_toggle_action_set_active (GTK_TOGGLE_ACTION (action),
+-				      ev_document_model_get_inverted_colors (window->priv->model));
+-	g_signal_handlers_unblock_by_func
+-		(action, G_CALLBACK (ev_window_cmd_view_inverted_colors), window);
+-}
+-
+-static void
+ ev_window_inverted_colors_changed_cb (EvDocumentModel *model,
+ 			              GParamSpec      *pspec,
+ 			              EvWindow        *window)
+ {
+ 	gboolean inverted_colors = ev_document_model_get_inverted_colors (model);
++	GAction *action;
+ 
+-	ev_window_update_inverted_colors_action (window);
++	action = g_action_map_lookup_action (G_ACTION_MAP (window), "inverted-colors");
++	g_simple_action_set_state (G_SIMPLE_ACTION (action),
++				   g_variant_new_boolean (inverted_colors));
+ 
+ 	if (window->priv->metadata && !ev_window_is_empty (window))
+ 		ev_metadata_set_boolean (window->priv->metadata, "inverted-colors",
+@@ -4960,43 +4668,20 @@
+ }
+ 
+ static void
+-ev_window_update_dual_page_action (EvWindow *window)
+-{
+-	GtkAction *action;
+-
+-	action = gtk_action_group_get_action (window->priv->action_group, "ViewDual");
+-	g_signal_handlers_block_by_func
+-		(action, G_CALLBACK (ev_window_cmd_dual), window);
+-	gtk_toggle_action_set_active (GTK_TOGGLE_ACTION (action),
+-				      ev_document_model_get_dual_page (window->priv->model));
+-	g_signal_handlers_unblock_by_func
+-		(action, G_CALLBACK (ev_window_cmd_dual), window);
+-}
+-
+-static void
+ ev_window_dual_mode_changed_cb (EvDocumentModel *model,
+ 				GParamSpec      *pspec,
+ 				EvWindow        *ev_window)
+ {
+-	ev_window_update_dual_page_action (ev_window);
++	gboolean dual_page;
++	GAction *action;
+ 
+-	if (ev_window->priv->metadata && !ev_window_is_empty (ev_window))
+-		ev_metadata_set_boolean (ev_window->priv->metadata, "dual-page",
+-					 ev_document_model_get_dual_page (model));
+-}
++	dual_page = ev_document_model_get_dual_page (model);
+ 
+-static void
+-ev_window_update_dual_page_odd_pages_left_action (EvWindow *window)
+-{
+-	GtkAction *action;
++	action = g_action_map_lookup_action (G_ACTION_MAP (ev_window), "dual-page");
++	g_simple_action_set_state (G_SIMPLE_ACTION (action), g_variant_new_boolean (dual_page));
+ 
+-	action = gtk_action_group_get_action (window->priv->action_group, "ViewDualOddLeft");
+-	g_signal_handlers_block_by_func
+-		(action, G_CALLBACK (ev_window_cmd_dual_odd_pages_left), window);
+-	gtk_toggle_action_set_active (GTK_TOGGLE_ACTION (action),
+-				      ev_document_model_get_dual_page_odd_pages_left (window->priv->model));
+-	g_signal_handlers_unblock_by_func
+-		(action, G_CALLBACK (ev_window_cmd_dual_odd_pages_left), window);
++	if (ev_window->priv->metadata && !ev_window_is_empty (ev_window))
++		ev_metadata_set_boolean (ev_window->priv->metadata, "dual-page", dual_page);
+ }
+ 
+ static void
+@@ -5004,119 +4689,36 @@
+ 					       GParamSpec      *pspec,
+ 					       EvWindow        *ev_window)
+ {
+-	ev_window_update_dual_page_odd_pages_left_action (ev_window);
+-
+ 	if (ev_window->priv->metadata && !ev_window_is_empty (ev_window))
+ 		ev_metadata_set_boolean (ev_window->priv->metadata, "dual-page-odd-left",
+ 					 ev_document_model_get_dual_page_odd_pages_left (model));
+ }
+ 
+-static char *
+-build_comments_string (EvDocument *document)
+-{
+-	gchar *comments = NULL;
+-	EvDocumentBackendInfo info;
+-
+-	if (document && ev_document_get_backend_info (document, &info)) {
+-		comments = g_strdup_printf (
+-			_("Document Viewer\nUsing %s (%s)"),
+-			info.name, info.version);
+-	} else {
+-		comments = g_strdup_printf (
+-			_("Document Viewer"));
+-	}
+-
+-	return comments;
+-}
+-
+ static void
+-ev_window_cmd_help_about (GtkAction *action, EvWindow *ev_window)
++ev_window_activate_open_menu_command (GSimpleAction *action,
++				      GVariant      *parameter,
++				      gpointer       user_data)
+ {
+-	const char *authors[] = {
+-		"Martin Kretzschmar <m_kretzschmar@gmx.net>",
+-		"Jonathan Blandford <jrb@gnome.org>",
+-		"Marco Pesenti Gritti <marco@gnome.org>",
+-		"Nickolay V. Shmyrev <nshmyrev@yandex.ru>",
+-		"Bryan Clark <clarkbw@gnome.org>",
+-		"Carlos Garcia Campos <carlosgc@gnome.org>",
+-		"Wouter Bolsterlee <wbolster@gnome.org>",
+-                "Christian Persch <chpe" "\100" "gnome.org>",
+-		NULL
+-	};
++	EvWindow *ev_window = user_data;
+ 
+-	const char *documenters[] = {
+-		"Nickolay V. Shmyrev <nshmyrev@yandex.ru>",
+-		"Phil Bull <philbull@gmail.com>",
+-		"Tiffany Antpolski <tiffany.antopolski@gmail.com>",
+-		NULL
+-	};
+-
+-	const char *license[] = {
+-		N_("Evince is free software; you can redistribute it and/or modify "
+-		   "it under the terms of the GNU General Public License as published by "
+-		   "the Free Software Foundation; either version 2 of the License, or "
+-		   "(at your option) any later version.\n"),
+-		N_("Evince is distributed in the hope that it will be useful, "
+-		   "but WITHOUT ANY WARRANTY; without even the implied warranty of "
+-		   "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the "
+-		   "GNU General Public License for more details.\n"),
+-		N_("You should have received a copy of the GNU General Public License "
+-		   "along with Evince; if not, write to the Free Software Foundation, Inc., "
+-		   "51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA\n")
+-	};
+-
+-	char *license_trans;
+-	char *comments;
+-
+-#ifdef ENABLE_NLS
+-	const char **p;
+-
+-	for (p = authors; *p; ++p)
+-		*p = _(*p);
+-
+-	for (p = documenters; *p; ++p)
+-		*p = _(*p);
+-#endif
+-
+-	license_trans = g_strconcat (_(license[0]), "\n", _(license[1]), "\n",
+-				     _(license[2]), "\n", NULL);
+-
+-	comments = build_comments_string (ev_window->priv->document);
+-
+-	gtk_show_about_dialog (
+-		GTK_WINDOW (ev_window),
+-		"name", _("Evince"),
+-		"version", VERSION,
+-		"copyright",
+-		_("© 1996–2012 The Evince authors"),
+-		"license", license_trans,
+-		"website", "http://www.gnome.org/projects/evince",
+-		"comments", comments,
+-		"authors", authors,
+-		"documenters", documenters,
+-		"translator-credits", _("translator-credits"),
+-		"logo-icon-name", "evince",
+-		"wrap-license", TRUE,
+-		NULL);
+-
+-	g_free (comments);
+-	g_free (license_trans);
+-}
+-
+-static void
+-ev_window_cmd_action_menu (GtkAction *action, EvWindow *ev_window)
+-{
+ 	ev_toolbar_action_menu_popup (EV_TOOLBAR (ev_window->priv->toolbar));
+ }
+ 
+ static void
+-ev_window_view_sidebar_cb (GtkAction *action, EvWindow *ev_window)
++ev_window_change_show_side_pane_action_state (GSimpleAction *action,
++					      GVariant      *state,
++					      gpointer       user_data)
+ {
++	EvWindow *ev_window = user_data;
++	gboolean show_side_pane;
++
+ 	if (EV_WINDOW_IS_PRESENTATION (ev_window))
+ 		return;
+-	    
+-	update_chrome_flag (ev_window, EV_CHROME_SIDEBAR,
+-			    gtk_toggle_action_get_active (GTK_TOGGLE_ACTION (action)));
++
++	show_side_pane = g_variant_get_boolean (state);
++	g_simple_action_set_state (action, g_variant_new_boolean (show_side_pane));
++
++	update_chrome_flag (ev_window, EV_CHROME_SIDEBAR, show_side_pane);
+ 	update_chrome_visibility (ev_window);
+ }
+ 
+@@ -5137,14 +4739,11 @@
+ 					 GParamSpec *pspec,
+ 					 EvWindow   *ev_window)
+ {
+-	GtkAction *action;
+-
+-	action = gtk_action_group_get_action (ev_window->priv->action_group, "ViewSidebar");
+-
+ 	if (!EV_WINDOW_IS_PRESENTATION (ev_window)) {
+ 		gboolean visible = gtk_widget_get_visible (GTK_WIDGET (ev_sidebar));
+ 
+-		gtk_toggle_action_set_active (GTK_TOGGLE_ACTION (action), visible);
++		g_action_group_change_action_state (G_ACTION_GROUP (ev_window), "show-side-pane",
++						    g_variant_new_boolean (visible));
+ 
+ 		if (ev_window->priv->metadata)
+ 			ev_metadata_set_boolean (ev_window->priv->metadata, "sidebar_visibility",
+@@ -5154,14 +4753,10 @@
+ 	}
+ }
+ 
+-static void
++static GMenuModel *
+ view_menu_link_popup (EvWindow *ev_window,
+ 		      EvLink   *link)
+ {
+-	gboolean   show_external = FALSE;
+-	gboolean   show_internal = FALSE;
+-	GtkAction *action;
+-	
+ 	if (ev_window->priv->link)
+ 		g_object_unref (ev_window->priv->link);
+ 	
+@@ -5178,42 +4773,23 @@
+ 			switch (ev_link_action_get_action_type (ev_action)) {
+ 		                case EV_LINK_ACTION_TYPE_GOTO_DEST:
+ 		                case EV_LINK_ACTION_TYPE_GOTO_REMOTE:
+-					show_internal = TRUE;
+-					break;
++					return ev_window->priv->internal_link_section;
+ 		                case EV_LINK_ACTION_TYPE_EXTERNAL_URI:
+ 		                case EV_LINK_ACTION_TYPE_LAUNCH:
+-					show_external = TRUE;
+-					break;
+-		                default:
+-					break;
++					return ev_window->priv->external_link_section;
++				default:
++					return NULL;
+ 			}
+ 		}
+ 	}
+-	
+-	action = gtk_action_group_get_action (ev_window->priv->view_popup_action_group,
+-					      "OpenLink");
+-	gtk_action_set_visible (action, show_external);
+-
+-	action = gtk_action_group_get_action (ev_window->priv->view_popup_action_group,
+-					      "CopyLinkAddress");
+-	gtk_action_set_visible (action, show_external);
+-
+-	action = gtk_action_group_get_action (ev_window->priv->view_popup_action_group,
+-					      "GoLink");
+-	gtk_action_set_visible (action, show_internal);
+-
+-	action = gtk_action_group_get_action (ev_window->priv->view_popup_action_group,
+-					      "OpenLinkNewWindow");
+-	gtk_action_set_visible (action, show_internal);
++
++	return NULL;
+ }
+ 
+-static void
++static GMenuModel *
+ view_menu_image_popup (EvWindow  *ev_window,
+ 		       EvImage   *image)
+ {
+-	GtkAction *action;
+-	gboolean   show_image = FALSE;
+-	
+ 	if (ev_window->priv->image)
+ 		g_object_unref (ev_window->priv->image);
+ 	
+@@ -5222,38 +4798,22 @@
+ 	else	
+ 		ev_window->priv->image = NULL;
+ 
+-	show_image = (ev_window->priv->image != NULL);
+-	
+-	action = gtk_action_group_get_action (ev_window->priv->view_popup_action_group,
+-					      "SaveImageAs");
+-	gtk_action_set_visible (action, show_image);
+-
+-	action = gtk_action_group_get_action (ev_window->priv->view_popup_action_group,
+-					      "CopyImage");
+-	gtk_action_set_visible (action, show_image);
++	return ev_window->priv->image != NULL ? ev_window->priv->image_section : NULL;
+ }
+ 
+-static void
++static GMenuModel *
+ view_menu_annot_popup (EvWindow     *ev_window,
+ 		       EvAnnotation *annot)
+ {
+-	GtkAction *action;
+-	gboolean   show_annot = FALSE;
+-
+ 	if (ev_window->priv->annot)
+ 		g_object_unref (ev_window->priv->annot);
+ 	ev_window->priv->annot = (annot) ? g_object_ref (annot) : NULL;
+ 
+-	action = gtk_action_group_get_action (ev_window->priv->view_popup_action_group,
+-					      "AnnotProperties");
+-	gtk_action_set_visible (action, (annot != NULL && EV_IS_ANNOTATION_MARKUP (annot)));
+-
+ 	if (annot && EV_IS_ANNOTATION_ATTACHMENT (annot)) {
+ 		EvAttachment *attachment;
+ 
+ 		attachment = ev_annotation_attachment_get_attachment (EV_ANNOTATION_ATTACHMENT (annot));
+ 		if (attachment) {
+-			show_annot = TRUE;
+ 			if (ev_window->priv->attach_list) {
+ 				g_list_foreach (ev_window->priv->attach_list,
+ 						(GFunc) g_object_unref, NULL);
+@@ -5263,16 +4823,43 @@
+ 			ev_window->priv->attach_list =
+ 				g_list_prepend (ev_window->priv->attach_list,
+ 						g_object_ref (attachment));
++
++			return ev_window->priv->annotation_section;
+ 		}
+ 	}
+ 
+-	action = gtk_action_group_get_action (ev_window->priv->attachment_popup_action_group,
+-					      "OpenAttachment");
+-	gtk_action_set_visible (action, show_annot);
+-
+-	action = gtk_action_group_get_action (ev_window->priv->attachment_popup_action_group,
+-					      "SaveAttachmentAs");
+-	gtk_action_set_visible (action, show_annot);
++	return NULL;
++}
++
++static void
++popup_menu_detach (GtkWidget *attach_widget,
++		   GtkMenu   *menu)
++{
++	EvWindow *window = EV_WINDOW (attach_widget);
++
++	window->priv->popup_menu = NULL;
++}
++
++static GMenu *
++menu_new_copy (GMenuModel *source)
++{
++	GMenu *menu;
++	gint n_items;
++	gint i;
++
++	menu = g_menu_new ();
++
++	n_items = g_menu_model_get_n_items (source);
++	for (i = 0; i < n_items; i++) {
++		GMenuItem *item;
++
++		item = g_menu_item_new_from_model (source, i);
++		g_menu_append_item (menu, item);
++
++		g_object_unref (item);
++	}
++
++	return menu;
+ }
+ 
+ static gboolean
+@@ -5280,34 +4867,44 @@
+ 		    GList    *items,
+ 		    EvWindow *ev_window)
+ {
+-	GList   *l;
+-	gboolean has_link = FALSE;
+-	gboolean has_image = FALSE;
+-	gboolean has_annot = FALSE;
++	GList *l;
++	GMenu *popup;
++
++	if (ev_window->priv->popup_menu) {
++		gtk_widget_destroy (ev_window->priv->popup_menu);
++		ev_window->priv->popup_menu = NULL;
++	}
++
++	/* make a deep copy of the base menu to append the optionally
++	 * visible sections to */
++	popup = menu_new_copy (ev_window->priv->document_view_menu);
+ 
+ 	for (l = items; l; l = g_list_next (l)) {
+ 		if (EV_IS_LINK (l->data)) {
+-			view_menu_link_popup (ev_window, EV_LINK (l->data));
+-			has_link = TRUE;
++			GMenuModel *section = view_menu_link_popup (ev_window, EV_LINK (l->data));
++			if (section)
++				g_menu_prepend_section (popup, NULL, section);
+ 		} else if (EV_IS_IMAGE (l->data)) {
+-			view_menu_image_popup (ev_window, EV_IMAGE (l->data));
+-			has_image = TRUE;
++			GMenuModel *section = view_menu_image_popup (ev_window, EV_IMAGE (l->data));
++			if (section)
++				g_menu_append_section (popup, NULL, section);
+ 		} else if (EV_IS_ANNOTATION (l->data)) {
+-			view_menu_annot_popup (ev_window, EV_ANNOTATION (l->data));
+-			has_annot = TRUE;
++			GMenuModel *section = view_menu_annot_popup (ev_window, EV_ANNOTATION (l->data));
++			if (section)
++				g_menu_append_section (popup, NULL, section);
+ 		}
+ 	}
+ 
+-	if (!has_link)
+-		view_menu_link_popup (ev_window, NULL);
+-	if (!has_image)
+-		view_menu_image_popup (ev_window, NULL);
+-	if (!has_annot)
+-		view_menu_annot_popup (ev_window, NULL);
++	if (g_menu_model_get_n_items (G_MENU_MODEL (popup)) > 0) {
++		ev_window->priv->popup_menu = gtk_menu_new_from_model (G_MENU_MODEL (popup));
++		gtk_menu_attach_to_widget (GTK_MENU (ev_window->priv->popup_menu),
++					   GTK_WIDGET (ev_window), popup_menu_detach);
+ 
+-	gtk_menu_popup (GTK_MENU (ev_window->priv->view_popup),
+-			NULL, NULL, NULL, NULL,
+-			3, gtk_get_current_event_time ());
++		gtk_menu_popup (GTK_MENU (ev_window->priv->popup_menu), NULL, NULL, NULL, NULL,
++				3, gtk_get_current_event_time ());
++	}
++
++	g_object_unref (popup);
+ 	return TRUE;
+ }
+ 
+@@ -5316,8 +4913,6 @@
+ 			      GList           *attach_list,
+ 			      EvWindow        *ev_window)
+ {
+-	GtkWidget *popup;
+-
+ 	g_assert (attach_list != NULL);
+ 
+ 	if (ev_window->priv->attach_list) {
+@@ -5325,13 +4920,19 @@
+ 				(GFunc) g_object_unref, NULL);
+ 		g_list_free (ev_window->priv->attach_list);
+ 	}
+-	
++
+ 	ev_window->priv->attach_list = attach_list;
+-	
+-	popup = ev_window->priv->attachment_popup;
+ 
+-	gtk_menu_popup (GTK_MENU (popup), NULL, NULL,
+-			NULL, NULL,
++	if (ev_window->priv->popup_menu) {
++		gtk_widget_destroy (ev_window->priv->popup_menu);
++		ev_window->priv->popup_menu = NULL;
++	}
++
++	ev_window->priv->popup_menu = gtk_menu_new_from_model (ev_window->priv->attachment_section);
++	gtk_menu_attach_to_widget (GTK_MENU (ev_window->priv->popup_menu),
++				   GTK_WIDGET (ev_window), popup_menu_detach);
++
++	gtk_menu_popup (GTK_MENU (ev_window->priv->popup_menu), NULL, NULL, NULL, NULL,
+ 			3, gtk_get_current_event_time ());
+ 
+ 	return TRUE;
+@@ -5542,21 +5143,6 @@
+ }
+ 
+ static void
+-update_toggle_find_action (EvWindow *ev_window,
+-			   gboolean  active)
+-{
+-	GtkAction *action;
+-
+-	action = gtk_action_group_get_action (ev_window->priv->action_group, "EditFind");
+-	if (gtk_toggle_action_get_active (GTK_TOGGLE_ACTION (action)) == active)
+-		return;
+-
+-	g_signal_handlers_block_by_func (action, G_CALLBACK (ev_window_cmd_toggle_find), ev_window);
+-	gtk_toggle_action_set_active (GTK_TOGGLE_ACTION (action), active);
+-	g_signal_handlers_unblock_by_func (action, G_CALLBACK (ev_window_cmd_toggle_find), ev_window);
+-}
+-
+-static void
+ ev_window_show_find_bar (EvWindow *ev_window)
+ {
+ 	if (gtk_widget_get_visible (ev_window->priv->find_bar)) {
+@@ -5583,7 +5169,7 @@
+ 	update_chrome_flag (ev_window, EV_CHROME_FINDBAR, TRUE);
+ 	update_chrome_visibility (ev_window);
+ 	gtk_widget_grab_focus (ev_window->priv->find_bar);
+-	update_toggle_find_action (ev_window, TRUE);
++	g_action_group_change_action_state (G_ACTION_GROUP (ev_window), "find", g_variant_new_boolean (TRUE));
+ }
+ 
+ static void
+@@ -5601,7 +5187,7 @@
+ 	update_chrome_flag (ev_window, EV_CHROME_FINDBAR, FALSE);
+ 	update_chrome_visibility (ev_window);
+ 	gtk_widget_grab_focus (ev_window->priv->view);
+-	update_toggle_find_action (ev_window, FALSE);
++	g_action_group_change_action_state (G_ACTION_GROUP (ev_window), "find", g_variant_new_boolean (FALSE));
+ 
+ 	ev_history_thaw (ev_window->priv->history);
+ }
+@@ -5651,10 +5237,15 @@
+ ev_window_set_caret_navigation_enabled (EvWindow *window,
+ 					gboolean enabled)
+ {
++	GAction *action;
++
+ 	if (window->priv->metadata)
+ 		ev_metadata_set_boolean (window->priv->metadata, "caret-navigation", enabled);
+ 
+ 	ev_view_set_caret_navigation_enabled (EV_VIEW (window->priv->view), enabled);
++
++	action = g_action_map_lookup_action (G_ACTION_MAP (window), "caret-navigation");
++	g_simple_action_set_state (G_SIMPLE_ACTION (action), g_variant_new_boolean (enabled));
+ }
+ 
+ static void
+@@ -5668,7 +5259,7 @@
+ 
+ 	/* Turn the confirmation dialog off if the user has requested not to show it again */
+ 	if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (window->priv->ask_caret_navigation_check))) {
+-		g_settings_set_boolean (ev_window_ensure_settings (window), "show-caret-navigation-message", FALSE);
++		g_settings_set_boolean (ev_application_get_settings (EV_APP), "show-caret-navigation-message", FALSE);
+ 		g_settings_apply (window->priv->settings);
+ 	}
+ 
+@@ -5678,9 +5269,11 @@
+ }
+ 
+ static void
+-ev_window_cmd_view_toggle_caret_navigation (GtkAction *action,
+-					    EvWindow *window)
++ev_window_change_caret_navigation_action_state (GSimpleAction *action,
++						GVariant      *state,
++						gpointer       user_data)
+ {
++	EvWindow  *window = user_data;
+ 	GtkWidget *message_area;
+ 	GtkWidget *box;
+ 	GtkWidget *hbox;
+@@ -5689,7 +5282,7 @@
+ 	/* Don't ask for user confirmation to turn the caret navigation off when it is active,
+ 	 * or to turn it on when the confirmation dialog is not to be shown per settings */
+ 	enabled = ev_view_is_caret_navigation_enabled (EV_VIEW (window->priv->view));
+-	if (enabled || !g_settings_get_boolean (ev_window_ensure_settings (window), "show-caret-navigation-message")) {
++	if (enabled || !g_settings_get_boolean (ev_application_get_settings (EV_APP), "show-caret-navigation-message")) {
+ 		ev_window_set_caret_navigation_enabled (window, !enabled);
+ 		return;
+ 	}
+@@ -5793,40 +5386,24 @@
+ 		priv->action_group = NULL;
+ 	}
+ 
+-	if (priv->view_popup_action_group) {
+-		g_object_unref (priv->view_popup_action_group);
+-		priv->view_popup_action_group = NULL;
+-	}
+-
+-	if (priv->attachment_popup_action_group) {
+-		g_object_unref (priv->attachment_popup_action_group);
+-		priv->attachment_popup_action_group = NULL;
+-	}
++	g_clear_object (&priv->document_view_menu);
++	g_clear_object (&priv->external_link_section);
++	g_clear_object (&priv->internal_link_section);
++	g_clear_object (&priv->image_section);
++	g_clear_object (&priv->attachment_section);
++	g_clear_object (&priv->annotation_section);
+ 
+ 	g_clear_object (&priv->zoom_selector_popup_action_group);
+ 
+-	if (priv->recent_action_group) {
+-		g_object_unref (priv->recent_action_group);
+-		priv->recent_action_group = NULL;
+-	}
+-
+ 	if (priv->bookmarks_action_group) {
+ 		g_object_unref (priv->bookmarks_action_group);
+ 		priv->bookmarks_action_group = NULL;
+ 	}
+ 
+ 	if (priv->recent_manager) {
+-		g_signal_handlers_disconnect_by_func (priv->recent_manager,
+-						      ev_window_setup_recent,
+-						      window);
+ 		priv->recent_manager = NULL;
+ 	}
+ 
+-	if (priv->settings) {
+-		g_object_unref (priv->settings);
+-		priv->settings = NULL;
+-	}
+-
+ 	if (priv->default_settings) {
+ 		g_settings_apply (priv->default_settings);
+ 		g_object_unref (priv->default_settings);
+@@ -5838,8 +5415,6 @@
+ 		priv->lockdown_settings = NULL;
+ 	}
+ 
+-	priv->recent_ui_id = 0;
+-
+ 	if (priv->model) {
+ 		g_signal_handlers_disconnect_by_func (priv->model,
+ 						      ev_window_page_changed_cb,
+@@ -5955,7 +5530,6 @@
+ 	G_OBJECT_CLASS (ev_window_parent_class)->dispose (object);
+ }
+ 
+-
+ /*
+  * GtkWindow catches keybindings for the menu items _before_ passing them to
+  * the focused widget. This is unfortunate and means that pressing Ctrl+a,
+@@ -6012,206 +5586,6 @@
+ 	g_type_class_add_private (g_object_class, sizeof (EvWindowPrivate));
+ }
+ 
+-/* Normal items */
+-static const GtkActionEntry entries[] = {
+-	{ "Bookmarks", NULL, N_("_Bookmarks") },
+-	{ "RecentFiles", NULL, N_("_Recent") },
+-
+-	/* File menu */
+-	{ "FileOpen", GTK_STOCK_OPEN, N_("_Open…"), "<control>O",
+-	  N_("Open an existing document"),
+-	  G_CALLBACK (ev_window_cmd_file_open) },
+-	{ "FileOpenCopy", NULL, N_("Op_en a Copy"), "<control>N",
+-	  N_("Open a copy of the current document in a new window"),
+-	  G_CALLBACK (ev_window_cmd_file_open_copy) },
+-       	{ "FileSaveAs", GTK_STOCK_SAVE_AS, N_("_Save a Copy…"), "<control>S",
+-	  N_("Save a copy of the current document"),
+-	  G_CALLBACK (ev_window_cmd_save_as) },
+-	{ "FileSendTo", EV_STOCK_SEND_TO, N_("Send _To…"), NULL,
+-	  N_("Send current document by mail, instant message…"),
+-	  G_CALLBACK (ev_window_cmd_send_to) },
+-	{ "FileOpenContainingFolder", GTK_STOCK_DIRECTORY, N_("Open Containing _Folder"), NULL,
+-	  N_("Show the folder which contains this file in the file manager"),
+-	  G_CALLBACK (ev_window_cmd_open_containing_folder) },
+-	{ "FilePrint", GTK_STOCK_PRINT, N_("_Print…"), "<control>P",
+-	  N_("Print this document"),
+-	  G_CALLBACK (ev_window_cmd_file_print) },
+-	{ "FileProperties", GTK_STOCK_PROPERTIES, N_("P_roperties"), "<alt>Return", NULL,
+-	  G_CALLBACK (ev_window_cmd_file_properties) },			      
+-	{ "FileCloseWindow", GTK_STOCK_CLOSE, NULL, "<control>W", NULL,
+-	  G_CALLBACK (ev_window_cmd_file_close_window) },
+-
+-        /* Edit menu */
+-        { "EditCopy", GTK_STOCK_COPY, NULL, "<control>C", NULL,
+-          G_CALLBACK (ev_window_cmd_edit_copy) },
+- 	{ "EditSelectAll", GTK_STOCK_SELECT_ALL, N_("Select _All"), "<control>A", NULL,
+-	  G_CALLBACK (ev_window_cmd_edit_select_all) },
+-	{ "EditRotateLeft", EV_STOCK_ROTATE_LEFT, N_("Rotate _Left"), "<control>Left", NULL,
+-	  G_CALLBACK (ev_window_cmd_edit_rotate_left) },
+-	{ "EditRotateRight", EV_STOCK_ROTATE_RIGHT, N_("Rotate _Right"), "<control>Right", NULL,
+-	  G_CALLBACK (ev_window_cmd_edit_rotate_right) },
+-	{ "EditSaveSettings", NULL, N_("Save Current Settings as _Default"), "<control>T", NULL,
+-	  G_CALLBACK (ev_window_cmd_edit_save_settings) },
+-
+-
+-        /* View menu */
+-        { "ViewZoomIn", GTK_STOCK_ZOOM_IN, NULL, "<control>plus",
+-          N_("Enlarge the document"),
+-          G_CALLBACK (ev_window_cmd_view_zoom_in) },
+-        { "ViewZoomOut", GTK_STOCK_ZOOM_OUT, NULL, "<control>minus",
+-          N_("Shrink the document"),
+-          G_CALLBACK (ev_window_cmd_view_zoom_out) },
+-        { "ViewReload", GTK_STOCK_REFRESH, N_("_Reload"), "<control>R",
+-          N_("Reload the document"),
+-          G_CALLBACK (ev_window_cmd_view_reload) },
+-
+-	{ "ViewAutoscroll", GTK_STOCK_MEDIA_PLAY, N_("Auto_scroll"), NULL, NULL,
+-	  G_CALLBACK (ev_window_cmd_view_autoscroll) },
+-
+-        /* Go menu */
+-        { "GoPreviousPage", "go-up-symbolic", N_("_Previous Page"), "<control>Page_Up",
+-          N_("Go to the previous page"),
+-          G_CALLBACK (ev_window_cmd_go_previous_page) },
+-        { "GoNextPage", "go-down-symbolic", N_("_Next Page"), "<control>Page_Down",
+-          N_("Go to the next page"),
+-          G_CALLBACK (ev_window_cmd_go_next_page) },
+-        { "GoFirstPage", GTK_STOCK_GOTO_TOP, N_("_First Page"), "<control>Home",
+-          N_("Go to the first page"),
+-          G_CALLBACK (ev_window_cmd_go_first_page) },
+-        { "GoLastPage", GTK_STOCK_GOTO_BOTTOM, N_("_Last Page"), "<control>End",
+-          N_("Go to the last page"),
+-          G_CALLBACK (ev_window_cmd_go_last_page) },
+-        { "GoToPage", GTK_STOCK_GOTO_TOP, N_("Go to Pa_ge"),"<control>L",
+-          N_("Go to Page"),
+-          G_CALLBACK (ev_window_cmd_focus_page_selector) },
+-
+-	/* Bookmarks menu */
+-	{ "BookmarksAdd", GTK_STOCK_ADD, N_("_Add Bookmark"), "<control>D",
+-	  N_("Add a bookmark for the current page"),
+-	  G_CALLBACK (ev_window_cmd_bookmarks_add) },
+-
+-	{ "HelpAbout", GTK_STOCK_ABOUT, N_("_About"), NULL, NULL,
+-	  G_CALLBACK (ev_window_cmd_help_about) },
+-
+-	/* Toolbar-only */
+-	{ "LeaveFullscreen", GTK_STOCK_LEAVE_FULLSCREEN, N_("Leave Fullscreen"), NULL,
+-	  N_("Leave fullscreen mode"),
+-	  G_CALLBACK (ev_window_cmd_leave_fullscreen) },
+-	{ "StartPresentation", EV_STOCK_RUN_PRESENTATION, N_("Start Presentation"), NULL,
+-	  N_("Start a presentation"),
+-	  G_CALLBACK (ev_window_cmd_start_presentation) },
+-
+-	/* Accellerators */
+-	{ "Escape", NULL, "", "Escape", "",
+-	  G_CALLBACK (ev_window_cmd_escape) },
+-	{ "CtrlF", GTK_STOCK_FIND, NULL, "<control>F", NULL,
+-	  G_CALLBACK (ev_window_cmd_edit_find) },
+-        { "Slash", GTK_STOCK_FIND, NULL, "slash", NULL,
+-          G_CALLBACK (ev_window_cmd_edit_find) },
+-        { "F3", NULL, "", "F3", NULL,
+-          G_CALLBACK (ev_window_cmd_edit_find_next) },
+-	{ "CtrlG", NULL, "", "<control>G", NULL,
+-	  G_CALLBACK (ev_window_cmd_edit_find_next) },
+-	{ "ShiftCtrlG", NULL, "", "<shift><control>G", NULL,
+-	  G_CALLBACK (ev_window_cmd_edit_find_previous) },
+-        { "PageDown", NULL, "", "Page_Down", NULL,
+-          G_CALLBACK (ev_window_cmd_scroll_forward) },
+-        { "PageUp", NULL, "", "Page_Up", NULL,
+-          G_CALLBACK (ev_window_cmd_scroll_backward) },
+-	{ "p", GTK_STOCK_GO_UP, "", "p", NULL,
+-	  G_CALLBACK (ev_window_cmd_go_previous_page) },
+-	{ "n", GTK_STOCK_GO_DOWN, "", "n", NULL,
+-	  G_CALLBACK (ev_window_cmd_go_next_page) },
+-        { "Plus", GTK_STOCK_ZOOM_IN, NULL, "plus", NULL,
+-          G_CALLBACK (ev_window_cmd_view_zoom_in) },
+-        { "CtrlEqual", GTK_STOCK_ZOOM_IN, NULL, "<control>equal", NULL,
+-          G_CALLBACK (ev_window_cmd_view_zoom_in) },
+-        { "Equal", GTK_STOCK_ZOOM_IN, NULL, "equal", NULL,
+-          G_CALLBACK (ev_window_cmd_view_zoom_in) },
+-        { "Minus", GTK_STOCK_ZOOM_OUT, NULL, "minus", NULL,
+-          G_CALLBACK (ev_window_cmd_view_zoom_out) },
+-        { "FocusPageSelector", NULL, "", "<control>l", NULL,
+-          G_CALLBACK (ev_window_cmd_focus_page_selector) },
+-        { "GoBackwardFast", NULL, "", "<shift>Page_Up", NULL,
+-          G_CALLBACK (ev_window_cmd_go_backward) },
+-        { "GoForwardFast", NULL, "", "<shift>Page_Down", NULL,
+-          G_CALLBACK (ev_window_cmd_go_forward) },
+-        { "KpPlus", GTK_STOCK_ZOOM_IN, NULL, "KP_Add", NULL,
+-          G_CALLBACK (ev_window_cmd_view_zoom_in) },
+-        { "KpMinus", GTK_STOCK_ZOOM_OUT, NULL, "KP_Subtract", NULL,
+-          G_CALLBACK (ev_window_cmd_view_zoom_out) },
+-        { "CtrlKpPlus", GTK_STOCK_ZOOM_IN, NULL, "<control>KP_Add", NULL,
+-          G_CALLBACK (ev_window_cmd_view_zoom_in) },
+-        { "CtrlKpMinus", GTK_STOCK_ZOOM_OUT, NULL, "<control>KP_Subtract", NULL,
+-          G_CALLBACK (ev_window_cmd_view_zoom_out) },
+-	{ "CtrlInsert", GTK_STOCK_COPY, NULL, "<control>Insert", NULL,
+-	  G_CALLBACK (ev_window_cmd_edit_copy) },
+-	{ "FitPage", EV_STOCK_ZOOM_PAGE, NULL, "f", NULL,
+-	  G_CALLBACK (ev_window_cmd_fit_page) },
+-	{ "FitWidth", EV_STOCK_ZOOM_WIDTH, NULL, "w", NULL,
+-	  G_CALLBACK (ev_window_cmd_fit_width) },
+-	{ "F10", NULL, "", "F10", NULL,
+-	  G_CALLBACK (ev_window_cmd_action_menu) },
+-	{ "F7", NULL, "", "F7", NULL,
+-	  G_CALLBACK (ev_window_cmd_view_toggle_caret_navigation) },
+-};
+-
+-/* Toggle items */
+-static const GtkToggleActionEntry toggle_entries[] = {
+-	/* View Menu */
+-        { "ViewSidebar", GTK_STOCK_INDEX, N_("Side _Pane"), "F9",
+-	  N_("Show or hide the side pane"),
+-	  G_CALLBACK (ev_window_view_sidebar_cb), TRUE },
+-        { "ViewContinuous", EV_STOCK_VIEW_CONTINUOUS, N_("_Continuous"), NULL,
+-	  N_("Show the entire document"),
+-	  G_CALLBACK (ev_window_cmd_continuous), TRUE },
+-        { "ViewDual", EV_STOCK_VIEW_DUAL, N_("_Dual"), NULL,
+-	  N_("Show two pages at once"),
+-	  G_CALLBACK (ev_window_cmd_dual), FALSE },
+-	{ "ViewDualOddLeft", NULL, N_("_Odd Pages Left"), NULL,
+-	  N_("Show odd pages on the left in dual mode"),
+-	  G_CALLBACK (ev_window_cmd_dual_odd_pages_left), FALSE },
+-        { "ViewFullscreen", GTK_STOCK_FULLSCREEN, N_("_Fullscreen"), "F11",
+-          N_("Expand the window to fill the screen"),
+-          G_CALLBACK (ev_window_cmd_view_fullscreen) },
+-        { "ViewPresentation", EV_STOCK_RUN_PRESENTATION, N_("Pre_sentation"), "F5",
+-          N_("Run document as a presentation"),
+-          G_CALLBACK (ev_window_cmd_view_presentation) },
+-	{ "ViewInvertedColors", EV_STOCK_INVERTED_COLORS, N_("_Inverted Colors"), "<control>I",
+-	  N_("Show page contents with the colors inverted"),
+-	  G_CALLBACK (ev_window_cmd_view_inverted_colors) },
+-
+-	{ "EditFind", "edit-find-symbolic", N_("_Find…"), "<control>F",
+-	  N_("Find a word or phrase in the document"),
+-	  G_CALLBACK (ev_window_cmd_toggle_find) },
+-};
+-
+-/* Popups specific items */
+-static const GtkActionEntry view_popup_entries [] = {
+-	/* Links */
+-	{ "OpenLink", GTK_STOCK_OPEN, N_("_Open Link"), NULL,
+-	  NULL, G_CALLBACK (ev_view_popup_cmd_open_link) },
+-	{ "GoLink", GTK_STOCK_GO_FORWARD, N_("_Go To"), NULL,
+-	  NULL, G_CALLBACK (ev_view_popup_cmd_open_link) },
+-	{ "OpenLinkNewWindow", NULL, N_("Open in New _Window"), NULL,
+-	  NULL, G_CALLBACK (ev_view_popup_cmd_open_link_new_window) },
+-	{ "CopyLinkAddress", NULL, N_("_Copy Link Address"), NULL,
+-	  NULL, G_CALLBACK (ev_view_popup_cmd_copy_link_address) },
+-	{ "SaveImageAs", NULL, N_("_Save Image As…"), NULL,
+-	  NULL, G_CALLBACK (ev_view_popup_cmd_save_image_as) },
+-	{ "CopyImage", NULL, N_("Copy _Image"), NULL,
+-	  NULL, G_CALLBACK (ev_view_popup_cmd_copy_image) },
+-	{ "AnnotProperties", NULL, N_("Annotation Properties…"), NULL,
+-	  NULL, G_CALLBACK (ev_view_popup_cmd_annot_properties) }
+-};
+-
+-static const GtkActionEntry attachment_popup_entries [] = {
+-	{ "OpenAttachment", GTK_STOCK_OPEN, N_("_Open Attachment"), NULL,
+-	  NULL, G_CALLBACK (ev_attachment_popup_cmd_open_attachment) },
+-	{ "SaveAttachmentAs", GTK_STOCK_SAVE_AS, N_("_Save Attachment As…"), NULL,
+-	  NULL, G_CALLBACK (ev_attachment_popup_cmd_save_attachment_as) },
+-};
+-
+ static const GtkToggleActionEntry zoom_selector_popup_actions[] = {
+ 	{ "ViewFitPage", EV_STOCK_ZOOM_PAGE, N_("Fit Pa_ge"), NULL,
+ 	  N_("Make the current document fill the window"),
+@@ -6276,13 +5650,6 @@
+ }
+ 
+ static void
+-sidebar_bookmarks_add_bookmark (EvSidebarBookmarks *sidebar_bookmarks,
+-				EvWindow           *window)
+-{
+-	ev_window_cmd_bookmarks_add (NULL, window);
+-}
+-
+-static void
+ zoom_action_activated_cb (EvZoomAction *action,
+ 			  EvWindow     *window)
+ {
+@@ -6378,42 +5745,6 @@
+ }
+ 
+ static void
+-set_action_properties (GtkActionGroup *action_group)
+-{
+-	GtkAction *action;
+-
+-	action = gtk_action_group_get_action (action_group, "FileOpenContainingFolder");
+-	/*translators: this is the label for toolbar button*/
+-	g_object_set (action, "short_label", _("Open Folder"), NULL);
+-
+-	action = gtk_action_group_get_action (action_group, "FileSendTo");
+-	/*translators: this is the label for toolbar button*/
+-	g_object_set (action, "short_label", _("Send To"), NULL);
+-	gtk_action_set_visible (action, nautilus_sendto != NULL);
+-
+-	action = gtk_action_group_get_action (action_group, "GoPreviousPage");
+-	g_object_set (action, "is-important", TRUE, NULL);
+-	/*translators: this is the label for toolbar button*/
+-	g_object_set (action, "short_label", _("Previous"), NULL);
+-
+-	action = gtk_action_group_get_action (action_group, "GoNextPage");
+-	g_object_set (action, "is-important", TRUE, NULL);
+-	/*translators: this is the label for toolbar button*/
+-	g_object_set (action, "short_label", _("Next"), NULL);
+-
+-	action = gtk_action_group_get_action (action_group, "ViewZoomIn");
+-	/*translators: this is the label for toolbar button*/
+-	g_object_set (action, "short_label", _("Zoom In"), NULL);
+-
+-	action = gtk_action_group_get_action (action_group, "ViewZoomOut");
+-	/*translators: this is the label for toolbar button*/
+-	g_object_set (action, "short_label", _("Zoom Out"), NULL);
+-
+-	action = gtk_action_group_get_action (action_group, "LeaveFullscreen");
+-	g_object_set (action, "is-important", TRUE, NULL);
+-}
+-
+-static void
+ sidebar_widget_model_set (EvSidebarLinks *ev_sidebar_links,
+ 			  GParamSpec     *pspec,
+ 			  EvWindow       *ev_window)
+@@ -6647,21 +5978,21 @@
+ 	const gchar *name = ev_link_action_get_name (action);
+ 
+ 	if (g_ascii_strcasecmp (name, "FirstPage") == 0) {
+-		ev_window_cmd_go_first_page (NULL, window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "go-first-page", NULL);
+ 	} else if (g_ascii_strcasecmp (name, "PrevPage") == 0) {
+-		ev_window_cmd_go_previous_page (NULL, window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "go-previous-page", NULL);
+ 	} else if (g_ascii_strcasecmp (name, "NextPage") == 0) {
+-		ev_window_cmd_go_next_page (NULL, window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "go-next-page", NULL);
+ 	} else if (g_ascii_strcasecmp (name, "LastPage") == 0) {
+-		ev_window_cmd_go_last_page (NULL, window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "go-last-page", NULL);
+ 	} else if (g_ascii_strcasecmp (name, "GoToPage") == 0) {
+-		ev_window_cmd_focus_page_selector (NULL, window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "select-page", NULL);
+ 	} else if (g_ascii_strcasecmp (name, "Find") == 0) {
+-		ev_window_show_find_bar (window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "find", NULL);
+ 	} else if (g_ascii_strcasecmp (name, "Close") == 0) {
+-		ev_window_cmd_file_close_window (NULL, window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "close", NULL);
+ 	} else if (g_ascii_strcasecmp (name, "Print") == 0) {
+-		ev_window_cmd_file_print (NULL, window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "print", NULL);
+ 	} else {
+ 		g_warning ("Unimplemented named action: %s, please post a "
+ 		           "bug report in Evince bugzilla "
+@@ -6702,14 +6033,21 @@
+ }
+ 
+ static void
+-ev_view_popup_cmd_open_link (GtkAction *action, EvWindow *window)
++ev_window_activate_open_link_action (GSimpleAction *action,
++				     GVariant      *parameter,
++				     gpointer       user_data)
+ {
++	EvWindow *window = user_data;
++
+ 	ev_view_handle_link (EV_VIEW (window->priv->view), window->priv->link);
+ }
+ 
+ static void
+-ev_view_popup_cmd_open_link_new_window (GtkAction *action, EvWindow *window)
++ev_window_activate_open_link_in_new_window_action (GSimpleAction *action,
++						   GVariant      *parameter,
++						   gpointer       user_data)
+ {
++	EvWindow     *window = user_data;
+ 	EvLinkAction *ev_action = NULL;
+ 	EvLinkDest   *dest;
+ 
+@@ -6725,8 +6063,11 @@
+ }
+ 
+ static void
+-ev_view_popup_cmd_copy_link_address (GtkAction *action, EvWindow *window)
++ev_window_activate_copy_link_address_action (GSimpleAction *action,
++					     GVariant      *parameter,
++					     gpointer       user_data)
+ {
++	EvWindow *window = user_data;
+ 	EvLinkAction *ev_action;
+ 
+ 	ev_action = ev_link_get_action (window->priv->link);
+@@ -6782,8 +6123,8 @@
+ 		return;
+ 	}
+ 
+-	ev_window_file_chooser_save_folder (ev_window, GTK_FILE_CHOOSER (fc),
+-                                            G_USER_DIRECTORY_PICTURES);
++	ev_file_chooser_save_folder (GTK_FILE_CHOOSER (fc),
++				     G_USER_DIRECTORY_PICTURES);
+ 
+ 	uri = gtk_file_chooser_get_uri (GTK_FILE_CHOOSER (fc));
+ 	filter = gtk_file_chooser_get_filter (GTK_FILE_CHOOSER (fc));
+@@ -6862,8 +6203,11 @@
+ }
+ 
+ static void
+-ev_view_popup_cmd_save_image_as (GtkAction *action, EvWindow *window)
++ev_window_activate_save_image_action (GSimpleAction *action,
++				      GVariant      *parameter,
++				      gpointer       user_data)
+ {
++	EvWindow *window = user_data;
+ 	GtkWidget *fc;
+ 
+ 	if (!window->priv->image)
+@@ -6887,9 +6231,9 @@
+ 	gtk_file_chooser_set_do_overwrite_confirmation (GTK_FILE_CHOOSER (fc), TRUE);
+ 	
+ 	file_chooser_dialog_add_writable_pixbuf_formats	(GTK_FILE_CHOOSER (fc));
+-	
+-        ev_window_file_chooser_restore_folder (window, GTK_FILE_CHOOSER (fc), NULL,
+-                                               G_USER_DIRECTORY_PICTURES);
++
++	ev_file_chooser_restore_folder (GTK_FILE_CHOOSER (fc), NULL,
++					G_USER_DIRECTORY_PICTURES);
+ 
+ 	g_signal_connect (fc, "response",
+ 			  G_CALLBACK (image_save_dialog_response_cb),
+@@ -6899,8 +6243,11 @@
+ }
+ 
+ static void
+-ev_view_popup_cmd_copy_image (GtkAction *action, EvWindow *window)
++ev_window_activate_copy_image_action (GSimpleAction *action,
++				      GVariant      *parameter,
++				      gpointer       user_data)
+ {
++	EvWindow     *window = user_data;
+ 	GtkClipboard *clipboard;
+ 	GdkPixbuf    *pixbuf;
+ 
+@@ -6919,9 +6266,11 @@
+ }
+ 
+ static void
+-ev_view_popup_cmd_annot_properties (GtkAction *action,
+-				    EvWindow  *window)
++ev_window_activate_show_annotation_properties_action (GSimpleAction *action,
++						      GVariant      *parameter,
++						      gpointer       user_data)
+ {
++	EvWindow                     *window = user_data;
+ 	const gchar                  *author;
+ 	GdkRGBA                       rgba;
+ 	gdouble                       opacity;
+@@ -6980,8 +6329,11 @@
+ }
+ 
+ static void
+-ev_attachment_popup_cmd_open_attachment (GtkAction *action, EvWindow *window)
++ev_window_activate_open_attachment_action (GSimpleAction *action,
++					   GVariant      *parameter,
++					   gpointer       user_data)
+ {
++	EvWindow  *window = user_data;
+ 	GList     *l;
+ 	GdkScreen *screen;
+ 	
+@@ -7023,8 +6375,8 @@
+ 		return;
+ 	}
+ 
+-	ev_window_file_chooser_save_folder (ev_window, GTK_FILE_CHOOSER (fc),
+-                                            G_USER_DIRECTORY_DOCUMENTS);
++	ev_file_chooser_save_folder (GTK_FILE_CHOOSER (fc),
++				     G_USER_DIRECTORY_DOCUMENTS);
+ 
+ 	uri = gtk_file_chooser_get_uri (GTK_FILE_CHOOSER (fc));
+ 	target_file = g_file_new_for_uri (uri);
+@@ -7089,8 +6441,11 @@
+ }
+ 
+ static void
+-ev_attachment_popup_cmd_save_attachment_as (GtkAction *action, EvWindow *window)
++ev_window_activate_save_attachment_action (GSimpleAction *action,
++					   GVariant      *parameter,
++					   gpointer       user_data)
+ {
++	EvWindow     *window = user_data;
+ 	GtkWidget    *fc;
+ 	EvAttachment *attachment = NULL;
+ 
+@@ -7122,8 +6477,8 @@
+ 		gtk_file_chooser_set_current_name (GTK_FILE_CHOOSER (fc),
+ 						   ev_attachment_get_name (attachment));
+ 
+-        ev_window_file_chooser_restore_folder (window, GTK_FILE_CHOOSER (fc), NULL,
+-                                               G_USER_DIRECTORY_DOCUMENTS);
++	ev_file_chooser_restore_folder (GTK_FILE_CHOOSER (fc), NULL,
++					G_USER_DIRECTORY_DOCUMENTS);
+ 
+ 	g_signal_connect (fc, "response",
+ 			  G_CALLBACK (attachment_save_dialog_response_cb),
+@@ -7154,16 +6509,16 @@
+ 		if (EV_WINDOW_IS_PRESENTATION (window))
+ 			ev_view_presentation_previous_page (EV_VIEW_PRESENTATION (window->priv->presentation_view));
+ 		else
+-			ev_window_cmd_go_previous_page (NULL, window);
++			g_action_group_activate_action (G_ACTION_GROUP (window), "go-previous-page", NULL);
+ 	} else if (strcmp (key, "Next") == 0) {
+ 		if (EV_WINDOW_IS_PRESENTATION (window))
+ 			ev_view_presentation_next_page (EV_VIEW_PRESENTATION (window->priv->presentation_view));
+ 		else
+-			ev_window_cmd_go_next_page (NULL, window);
++			g_action_group_activate_action (G_ACTION_GROUP (window), "go-next-page", NULL);
+ 	} else if (strcmp (key, "FastForward") == 0) {
+-		ev_window_cmd_go_last_page (NULL, window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "go-last-page", NULL);
+ 	} else if (strcmp (key, "Rewind") == 0) {
+-		ev_window_cmd_go_first_page (NULL, window);
++		g_action_group_activate_action (G_ACTION_GROUP (window), "go-first-page", NULL);
+ 	}
+ }
+ 
+@@ -7278,11 +6633,84 @@
+ }
+ 
+ static void
++activate_toggle_action (GSimpleAction *action,
++			GVariant      *parameter,
++			gpointer       user_data)
++{
++	GVariant *state;
++
++	state = g_action_get_state (G_ACTION (action));
++	g_action_change_state (G_ACTION (action), g_variant_new_boolean (!g_variant_get_boolean (state)));
++	g_variant_unref (state);
++}
++
++static void
++activate_radio_action (GSimpleAction *action,
++		       GVariant      *parameter,
++		       gpointer       user_data)
++{
++	g_action_change_state (G_ACTION (action), parameter);
++}
++
++static void
+ ev_window_init (EvWindow *ev_window)
+ {
++	const GActionEntry actions[] = {
++		{ "open-copy", ev_window_activate_open_copy_action, NULL, NULL, NULL },
++		{ "save-copy", ev_window_activate_save_copy_action, NULL, NULL, NULL },
++		{ "send-to", ev_window_activate_send_to_action, NULL, NULL, NULL },
++		{ "open-containing-folder", ev_window_activate_open_containing_folder_action, NULL, NULL, NULL },
++		{ "print", ev_window_activate_print_action, NULL, NULL, NULL },
++		{ "show-properties", ev_window_activate_show_properties_action, NULL, NULL, NULL },
++		{ "copy", ev_window_activate_copy_action, NULL, NULL, NULL },
++		{ "select-all", ev_window_activate_select_all_action, NULL, NULL, NULL },
++		{ "save-settings", ev_window_activate_save_settings_action, NULL, NULL, NULL },
++		{ "go-previous-page", ev_window_activate_go_previous_page_action, NULL, NULL, NULL },
++		{ "go-next-page", ev_window_activate_go_next_page_action, NULL, NULL, NULL },
++		{ "go-first-page", ev_window_activate_go_first_page_action, NULL, NULL, NULL },
++		{ "go-last-page", ev_window_activate_go_last_page_action, NULL, NULL, NULL },
++		{ "go-forward", ev_window_activate_go_forward_action, NULL, NULL, NULL },
++		{ "go-backwards", ev_window_activate_go_backward_action, NULL, NULL, NULL },
++		{ "find", activate_toggle_action, NULL, "false", ev_window_change_find_action_state },
++		{ "find-next", ev_window_activate_find_next_action, NULL, NULL, NULL },
++		{ "find-previous", ev_window_activate_find_previous_action, NULL, NULL, NULL },
++		{ "select-page", ev_window_activate_select_page_action, NULL, NULL, NULL },
++		{ "continuous", activate_toggle_action, NULL, "true", ev_window_change_continuous_action_state },
++		{ "dual-page", activate_toggle_action, NULL, "false", ev_window_change_dual_page_action_state },
++		{ "dual-odd-left", activate_toggle_action, NULL, "false", ev_window_change_dual_odd_left_action_state },
++		{ "show-side-pane", activate_toggle_action, NULL, "false", ev_window_change_show_side_pane_action_state },
++		{ "inverted-colors", activate_toggle_action, NULL, "false", ev_window_change_inverted_colors_action_state },
++		{ "fullscreen", activate_toggle_action, NULL, "false", ev_window_change_fullscreen_action_state },
++		{ "presentation", activate_toggle_action, NULL, "false", ev_window_change_presentation_action_state },
++		{ "rotate-left", ev_window_activate_rotate_left_action, NULL, NULL, NULL },
++		{ "rotate-right", ev_window_activate_rotate_right_action, NULL, NULL, NULL },
++		{ "zoom-in", ev_window_activate_zoom_in_action, NULL, NULL, NULL },
++		{ "zoom-out", ev_window_activate_zoom_out_action, NULL, NULL, NULL },
++		{ "reload", ev_window_activate_reload_action, NULL, NULL, NULL },
++		{ "auto-scroll", ev_window_activate_auto_scroll_action, NULL, NULL, NULL },
++		{ "add-bookmark", ev_window_activate_add_bookmark_action, NULL, NULL, NULL },
++		{ "goto-bookmark", ev_window_activate_goto_bookmark_action, "u", NULL, NULL },
++		{ "close", ev_window_activate_close_action, NULL, NULL, NULL },
++		{ "scroll-forward", ev_window_activate_scroll_forward_action, NULL, NULL, NULL },
++		{ "scroll-backwards", ev_window_activate_scroll_backwards_action, NULL, NULL, NULL },
++		{ "sizing-mode", activate_radio_action, "s", "'free'", ev_window_change_sizing_mode_action_state },
++		{ "escape", ev_window_activate_escape_action, NULL, NULL, NULL },
++		{ "open-menu", ev_window_activate_open_menu_command, NULL, NULL, NULL },
++		{ "caret-navigation", activate_toggle_action, NULL, "false", ev_window_change_caret_navigation_action_state },
++		{ "open-link", ev_window_activate_open_link_action, NULL, NULL, NULL },
++		{ "open-link-in-new-window", ev_window_activate_open_link_in_new_window_action, NULL, NULL, NULL },
++		{ "save-image", ev_window_activate_save_image_action, NULL, NULL, NULL },
++		{ "copy-image", ev_window_activate_copy_image_action, NULL, NULL, NULL },
++		{ "show-annotation-properties", ev_window_activate_show_annotation_properties_action, NULL, NULL, NULL },
++		{ "copy-link-address", ev_window_activate_copy_link_address_action, NULL, NULL, NULL },
++		{ "open-attachment", ev_window_activate_open_attachment_action, NULL, NULL, NULL },
++		{ "save-attachment", ev_window_activate_save_attachment_action, NULL, NULL, NULL },
++	};
++
+ 	GtkActionGroup *action_group;
+ 	GtkAccelGroup *accel_group;
+ 	GtkCssProvider *css_provider;
++	GtkBuilder *builder;
+ 	GError *error = NULL;
+ 	GtkWidget *sidebar_widget;
+ 	GtkWidget *overlay;
+@@ -7343,6 +6771,8 @@
+ 			  G_CALLBACK (activate_link_cb),
+ 			  ev_window);
+ 
++	ev_window->priv->bookmarks_menu = g_menu_new ();
++
+ 	app_info = g_app_info_get_default_for_uri_scheme ("mailto");
+ 	ev_window->priv->has_mailto_handler = app_info != NULL;
+ 	g_clear_object (&app_info);
+@@ -7351,15 +6781,13 @@
+ 	gtk_container_add (GTK_CONTAINER (ev_window), ev_window->priv->main_box);
+ 	gtk_widget_show (ev_window->priv->main_box);
+ 
++	g_action_map_add_action_entries (G_ACTION_MAP (ev_window),
++					 actions, G_N_ELEMENTS (actions),
++					 ev_window);
++
+ 	action_group = gtk_action_group_new ("MenuActions");
+ 	ev_window->priv->action_group = action_group;
+ 	gtk_action_group_set_translation_domain (action_group, NULL);
+-	gtk_action_group_add_actions (action_group, entries,
+-				      G_N_ELEMENTS (entries), ev_window);
+-	gtk_action_group_add_toggle_actions (action_group, toggle_entries,
+-					     G_N_ELEMENTS (toggle_entries),
+-					     ev_window);
+-	set_action_properties (action_group);
+ 	register_custom_actions (ev_window, action_group);
+ 
+ 	ev_window->priv->ui_manager = gtk_ui_manager_new ();
+@@ -7370,24 +6798,6 @@
+ 		gtk_ui_manager_get_accel_group (ev_window->priv->ui_manager);
+ 	gtk_window_add_accel_group (GTK_WINDOW (ev_window), accel_group);
+ 
+-	action_group = gtk_action_group_new ("ViewPopupActions");
+-	ev_window->priv->view_popup_action_group = action_group;
+-	gtk_action_group_set_translation_domain (action_group, NULL);
+-	gtk_action_group_add_actions (action_group, view_popup_entries,
+-				      G_N_ELEMENTS (view_popup_entries),
+-				      ev_window);
+-	gtk_ui_manager_insert_action_group (ev_window->priv->ui_manager,
+-					    action_group, 0);
+-
+-	action_group = gtk_action_group_new ("AttachmentPopupActions");
+-	ev_window->priv->attachment_popup_action_group = action_group;
+-	gtk_action_group_set_translation_domain (action_group, NULL);
+-	gtk_action_group_add_actions (action_group, attachment_popup_entries,
+-				      G_N_ELEMENTS (attachment_popup_entries),
+-				      ev_window);
+-	gtk_ui_manager_insert_action_group (ev_window->priv->ui_manager,
+-					    action_group, 0);
+-
+ 	action_group = gtk_action_group_new ("ZoomSelectorPopupActions");
+ 	ev_window->priv->zoom_selector_popup_action_group = action_group;
+ 	gtk_action_group_set_translation_domain (action_group, NULL);
+@@ -7397,10 +6807,10 @@
+ 	gtk_ui_manager_insert_action_group (ev_window->priv->ui_manager,
+ 					    action_group, 0);
+ 
+-        gtk_ui_manager_add_ui_from_resource (ev_window->priv->ui_manager,
+-                                             "/org/gnome/evince/shell/ui/evince.xml",
+-                                             &error);
+-        g_assert_no_error (error);
++	gtk_ui_manager_add_ui_from_resource (ev_window->priv->ui_manager,
++					     "/org/gnome/evince/shell/ui/evince.xml",
++					     &error);
++	g_assert_no_error (error);
+ 
+ 	ev_window_register_zoom_selector_popup_actions (ev_window);
+ 
+@@ -7415,12 +6825,6 @@
+ 	g_object_unref (css_provider);
+ 
+ 	ev_window->priv->recent_manager = gtk_recent_manager_get_default ();
+-	ev_window->priv->recent_action_group = NULL;
+-	ev_window->priv->recent_ui_id = 0;
+-	g_signal_connect_swapped (ev_window->priv->recent_manager,
+-				  "changed",
+-				  G_CALLBACK (ev_window_setup_recent),
+-				  ev_window);
+ 
+ 	ev_window->priv->toolbar = ev_toolbar_new (ev_window);
+ 	gtk_widget_set_no_show_all (ev_window->priv->toolbar, TRUE);
+@@ -7526,10 +6930,6 @@
+ 
+ 	sidebar_widget = ev_sidebar_bookmarks_new ();
+ 	ev_window->priv->sidebar_bookmarks = sidebar_widget;
+-	g_signal_connect (sidebar_widget,
+-			  "add-bookmark",
+-			  G_CALLBACK (sidebar_bookmarks_add_bookmark),
+-			  ev_window);
+ 	gtk_widget_show (sidebar_widget);
+ 	ev_sidebar_add_page (EV_SIDEBAR (ev_window->priv->sidebar),
+ 			     sidebar_widget);
+@@ -7565,7 +6965,7 @@
+ 	g_object_set(ev_window->priv->view, "enable-gestures",
+ 		     _oif_ev_application_get_gestures_enabled (EV_APP), NULL);
+ #endif
+-	page_cache_mb = g_settings_get_uint (ev_window_ensure_settings (ev_window),
++	page_cache_mb = g_settings_get_uint (ev_application_get_settings (EV_APP),
+ 					     GS_PAGE_CACHE_SIZE);
+ 	ev_view_set_page_cache_size (EV_VIEW (ev_window->priv->view),
+ 				     page_cache_mb * 1024 * 1024);
+@@ -7707,13 +7107,17 @@
+ 			  G_CALLBACK (find_bar_visibility_changed_cb),
+ 			  ev_window);
+ 
++	builder = gtk_builder_new_from_resource ("/org/gnome/evince/shell/ui/popup-menus.ui");
++
+ 	/* Popups */
+-	ev_window->priv->view_popup = gtk_ui_manager_get_widget (ev_window->priv->ui_manager,
+-								 "/DocumentPopup");
+-	ev_window->priv->link = NULL;
++	ev_window->priv->document_view_menu = G_MENU_MODEL (gtk_builder_get_object (builder, "document-view-menu"));
++	ev_window->priv->external_link_section = G_MENU_MODEL (gtk_builder_get_object (builder, "external-link-menu"));
++	ev_window->priv->internal_link_section = G_MENU_MODEL (gtk_builder_get_object (builder, "internal-link-menu"));
++	ev_window->priv->image_section = G_MENU_MODEL (gtk_builder_get_object (builder, "image-menu"));
++	ev_window->priv->attachment_section = G_MENU_MODEL (gtk_builder_get_object (builder, "attachment-menu"));
++	ev_window->priv->annotation_section = G_MENU_MODEL (gtk_builder_get_object (builder, "annotation-menu"));
+ 
+-	ev_window->priv->attachment_popup = gtk_ui_manager_get_widget (ev_window->priv->ui_manager,
+-								       "/AttachmentPopup");
++	ev_window->priv->link = NULL;
+ 	ev_window->priv->attach_list = NULL;
+ 
+ 	/* Media player keys */
+@@ -7731,9 +7135,6 @@
+ 	g_settings_delay (ev_window->priv->default_settings);
+ 	ev_window_setup_default (ev_window);
+ 
+-	/* Set it user interface params */
+-	ev_window_setup_recent (ev_window);
+-
+ 	gtk_window_set_default_size (GTK_WINDOW (ev_window), 600, 600);
+ 
+         ev_window_sizing_mode_changed_cb (ev_window->priv->model, NULL, ev_window);
+@@ -7745,6 +7146,8 @@
+ 			   NULL, 0,
+ 			   GDK_ACTION_COPY);
+ 	gtk_drag_dest_add_uri_targets (GTK_WIDGET (ev_window));
++
++	g_object_unref (builder);
+ }
+ 
+ /**
+@@ -7762,7 +7165,6 @@
+ 	ev_window = GTK_WIDGET (g_object_new (EV_TYPE_WINDOW,
+ 					      "type", GTK_WINDOW_TOPLEVEL,
+                                               "application", g_application_get_default (),
+-					      "show-menubar", FALSE,
+ 					      NULL));
+ 
+ 	return ev_window;
+@@ -7801,3 +7203,11 @@
+ 
+ 	return ev_window->priv->zoom_selector_popup_action_group;
+ }
++
++GMenuModel *
++ev_window_get_bookmarks_menu (EvWindow *ev_window)
++{
++	g_return_val_if_fail (EV_WINDOW (ev_window), NULL);
++
++	return G_MENU_MODEL (ev_window->priv->bookmarks_menu);
++}
+Index: evince-3.10.3/shell/ev-window.h
+===================================================================
+--- evince-3.10.3.orig/shell/ev-window.h	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/ev-window.h	2014-04-28 15:33:25.034869346 +0200
+@@ -89,7 +89,7 @@
+ GtkUIManager   *ev_window_get_ui_manager                 (EvWindow       *ev_window);
+ GtkActionGroup *ev_window_get_main_action_group          (EvWindow       *ev_window);
+ GtkActionGroup *ev_window_get_zoom_selector_action_group (EvWindow       *ev_window);
+-
++GMenuModel     *ev_window_get_bookmarks_menu             (EvWindow       *ev_window);
+ 
+ G_END_DECLS
+ 
+Index: evince-3.10.3/shell/evince-appmenu.ui
+===================================================================
+--- evince-3.10.3.orig/shell/evince-appmenu.ui	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/evince-appmenu.ui	2014-04-28 15:33:25.034869346 +0200
+@@ -20,6 +20,16 @@
+   <menu id="appmenu">
+     <section>
+       <item>
++        <attribute name="label" translatable="yes">_Open</attribute>
++        <attribute name="action">app.open</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_About</attribute>
++        <attribute name="action">app.about</attribute>
++      </item>
++      <item>
+         <attribute name="label" translatable="yes">_Help</attribute>
+         <attribute name="action">app.help</attribute>
+         <attribute name="accel">F1</attribute>
+Index: evince-3.10.3/shell/evince-ui.xml
+===================================================================
+--- evince-3.10.3.orig/shell/evince-ui.xml	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/evince-ui.xml	2014-04-28 15:33:25.034869346 +0200
+@@ -1,86 +1,4 @@
+ <ui>
+-  <popup name="ActionMenu" accelerators="true">
+-    <menuitem name="FileOpenMenu" action="FileOpen"/>
+-    <menuitem name="FileOpenCopyMenu" action="FileOpenCopy"/>
+-    <menu name="RecentFilesMenu" action="RecentFiles">
+-      <placeholder name="RecentFiles"/>
+-    </menu>
+-    <menuitem name="FileSaveAsMenu" action="FileSaveAs"/>
+-    <menuitem name="FileSendToMenu" action="FileSendTo"/>
+-    <menuitem name="FileOpenContainingFolderMenu" action="FileOpenContainingFolder"/>
+-    <menuitem name="FilePrintMenu" action="FilePrint"/>
+-    <separator/>
+-    <menuitem name="FilePropertiesMenu" action="FileProperties"/>
+-    <separator/>
+-    <menuitem name="EditCopyMenu" action="EditCopy"/>
+-    <menuitem name="EditSelectAllMenu" action="EditSelectAll"/>
+-    <separator/>
+-    <menuitem name="EditSaveSettingsMenu" action="EditSaveSettings"/>
+-    <separator/>
+-    <menuitem name="GoFirstPageMenu" action="GoFirstPage"/>
+-    <menuitem name="GoLastPageMenu" action="GoLastPage"/>
+-    <separator/>
+-    <menuitem name="BookmarksAddMenu" action="BookmarksAdd"/>
+-    <menu name="BookmarksMenu" action="Bookmarks">
+-      <placeholder name="BookmarksItems"/>
+-    </menu>
+-    <separator/>
+-    <menuitem name="FileCloseWindowMenu" action="FileCloseWindow"/>
+-    <separator/>
+-    <menuitem name="HelpAboutMenu" action="HelpAbout"/>
+-  </popup>
+-
+-  <popup name="ViewMenuPopup" accelerators="true">
+-    <menuitem name="ViewContinuousMenu" action="ViewContinuous"/>
+-    <menuitem name="ViewDualMenu" action="ViewDual"/>
+-    <separator/>
+-    <menuitem name="ViewSidebarMenu" action="ViewSidebar"/>
+-    <separator/>
+-    <menuitem name="ViewFullscreenMenu" action="ViewFullscreen"/>
+-    <menuitem name="ViewPresentationMenu" action="ViewPresentation"/>
+-    <separator/>
+-    <menuitem name="EditRotateLeftMenu" action="EditRotateLeft"/>
+-    <menuitem name="EditRotateRightMenu" action="EditRotateRight"/>
+-    <separator/>
+-    <menuitem name="ViewZoomInMenu" action="ViewZoomIn"/>
+-    <menuitem name="ViewZoomOutMenu" action="ViewZoomOut"/>
+-    <separator/>
+-    <menuitem name="ViewDualOddLeftMenu" action="ViewDualOddLeft"/>
+-    <menuitem name="ViewInvertedColors" action="ViewInvertedColors"/>
+-    <separator/>
+-    <menuitem name="ViewReload" action="ViewReload"/>
+-  </popup>
+-
+-  <popup name="DocumentPopup" action="DocumentPopupAction">
+-    <menuitem name="OpenLink" action="OpenLink"/>
+-    <menuitem name="CopyLinkAddress" action="CopyLinkAddress"/>
+-    <menuitem name="GoLink" action="GoLink"/>
+-    <menuitem name="OpenLinkNewWindow" action="OpenLinkNewWindow"/>
+-    <separator/>
+-    <menuitem name="GoPreviousPage" action="GoPreviousPage"/>
+-    <menuitem name="GoNextPage" action="GoNextPage"/>
+-    <menuitem name="ViewReload" action="ViewReload"/>
+-    <menuitem name="ViewAutoscroll" action="ViewAutoscroll"/>
+-    <separator/>
+-    <menuitem name="EditCopy" action="EditCopy"/>
+-    <menuitem name="EditSelectAllPopup" action="EditSelectAll"/>
+-    <separator/>
+-    <menuitem name="SaveImageAs" action="SaveImageAs"/>
+-    <menuitem name="CopyImage" action="CopyImage"/>
+-    <separator/>
+-    <menuitem name="OpenAttachment" action="OpenAttachment"/>
+-    <menuitem name="SaveAttachmentAs" action="SaveAttachmentAs"/>
+-    <separator/>
+-    <menuitem name="AnnotProperties" action="AnnotProperties"/>
+-    <menuitem name="FileOpenContainingFolder" action="FileOpenContainingFolder"/>
+-  </popup>
+-
+-  <popup name="AttachmentPopup" action="AttachmentPopupAction">
+-    <menuitem name="OpenAttachment" action="OpenAttachment"/>
+-    <separator/>
+-    <menuitem name="SaveAttachmentAs" action="SaveAttachmentAs"/>
+-  </popup>
+-
+   <popup name="ZoomSelectorPopup">
+     <menuitem name="ViewFitPage" action="ViewFitPage"/>
+     <menuitem name="ViewFitWidth" action="ViewFitWidth"/>
+@@ -88,31 +6,5 @@
+     <separator/>
+     <placeholder name="ViewZoomItems"/>
+   </popup>
+-
+-  <accelerator name="PageDownAccel" action="PageDown"/>
+-  <accelerator name="PageUpAccel" action="PageUp"/>
+-  <accelerator name="GoBackwardFastAccel" action="GoBackwardFast"/>
+-  <accelerator name="GoForwardFastAccel" action="GoForwardFast"/>
+-  <accelerator name="EscapeAccel" action="Escape"/>
+-  <accelerator name="CtrlFAccel" action="CtrlF"/>
+-  <accelerator name="SlashAccel" action="Slash"/>
+-  <accelerator name="F3Accel" action="F3"/>
+-  <accelerator name="CtrlGAccel" action="CtrlG"/>
+-  <accelerator name="ShiftCtrlGAccel" action="ShiftCtrlG"/>
+-  <accelerator name="pAccel" action="p"/>
+-  <accelerator name="nAccel" action="n"/>
+-  <accelerator name="FocusPageSelectorAccel" action="FocusPageSelector"/>
+-  <accelerator name="PlusAccel" action="Plus"/>
+-  <accelerator name="MinusAccel" action="Minus"/>
+-  <accelerator name="Equal" action="Equal"/>
+-  <accelerator name="CtrlEqualAccel" action="CtrlEqual"/>
+-  <accelerator name="KpPlusAccel" action="KpPlus"/>
+-  <accelerator name="KpMinusAccel" action="KpMinus"/>
+-  <accelerator name="CtrlKpPlusAccel" action="CtrlKpPlus"/>
+-  <accelerator name="CtrlKpMinusAccel" action="CtrlKpMinus"/>
+-  <accelerator name="CtrlInsertAccel" action="CtrlInsert" />
+-  <accelerator name="FitPageAccel" action ="FitPage" />
+-  <accelerator name="FitWidthAccel" action ="FitWidth" />
+-  <accelerator name="F10Accel" action="F10" />
+-  <accelerator name="F7Accel" action="F7" />
+ </ui>
++
+Index: evince-3.10.3/shell/evince.gresource.xml
+===================================================================
+--- evince-3.10.3.orig/shell/evince.gresource.xml	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/shell/evince.gresource.xml	2014-04-28 15:33:25.034869346 +0200
+@@ -19,6 +19,8 @@
+   <gresource prefix="/org/gnome/evince/shell">
+     <file alias="ui/evince.xml" compressed="true" preprocess="xml-stripblanks">evince-ui.xml</file>
+     <file alias="ui/evince.css" compressed="true">evince.css</file>
+-    <file alias="ui/appmenu.ui" compressed="true" preprocess="xml-stripblanks">evince-appmenu.ui</file>
++    <file alias="ui/menus.ui" compressed="true" preprocess="xml-stripblanks">menus.ui</file>
++    <file alias="ui/traditional-menus.ui" compressed="true" preprocess="xml-stripblanks">traditional-menus.ui</file>
++    <file alias="ui/popup-menus.ui" compressed="true" preprocess="xml-stripblanks">popup-menus.ui</file>
+   </gresource>
+ </gresources>
+Index: evince-3.10.3/shell/menus.ui
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ evince-3.10.3/shell/menus.ui	2014-04-28 15:33:30.000000000 +0200
+@@ -0,0 +1,188 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++  Copyright © 2012 Christian Persch
++  Copyright © 2014 Canonical Ltd.
++
++  This program is free software; you can redistribute it and/or modify
++  it under the terms of the GNU General Public License as published by
++  the Free Software Foundation; either version 3, or (at your option)
++  any later version.
++
++  This program is distributed in the hope conf it will be useful,
++  but WITHOUT ANY WARRANTY; without even the implied warranty of
++  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++  GNU General Public License for more details.
++
++  You should have received a copy of the GNU General Public License
++  along with this program; if not, write to the Free Software
++  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
++-->
++<interface>
++  <menu id="appmenu">
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Open</attribute>
++        <attribute name="action">app.open</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_About</attribute>
++        <attribute name="action">app.about</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Help</attribute>
++        <attribute name="action">app.help</attribute>
++      </item>
++    </section>
++  </menu>
++
++  <menu id="view-menu">
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Continuous</attribute>
++        <attribute name="action">win.continuous</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Dual</attribute>
++        <attribute name="action">win.dual-page</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">Side _Pane</attribute>
++        <attribute name="action">win.show-side-pane</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Fullscreen</attribute>
++        <attribute name="action">win.fullscreen</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Pre_sentation</attribute>
++        <attribute name="action">win.presentation</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">Rotate _Left</attribute>
++        <attribute name="action">win.rotate-left</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Rotate _Right</attribute>
++        <attribute name="action">win.rotate-right</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">Zoom _In</attribute>
++        <attribute name="action">win.zoom-in</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Zoom _Out</attribute>
++        <attribute name="action">win.zoom-out</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Odd Pages Left</attribute>
++        <attribute name="action">win.dual-odd-left</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Inverted Colors</attribute>
++        <attribute name="action">win.inverted-colors</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Reload</attribute>
++        <attribute name="action">win.reload</attribute>
++      </item>
++    </section>
++  </menu>
++
++  <menu id="action-menu">
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Open…</attribute>
++        <attribute name="action">app.open</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Op_en a Copy</attribute>
++        <attribute name="action">win.open-copy</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Recent</attribute>
++        <link name="submenu" id="recent">
++        </link>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Save a Copy…</attribute>
++        <attribute name="action">win.save-copy</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Send _To…</attribute>
++        <attribute name="action">win.send-to</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Open Containing _Folder</attribute>
++        <attribute name="action">win.open-containing-folder</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Print…</attribute>
++        <attribute name="action">win.print</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">P_roperties…</attribute>
++        <attribute name="action">win.show-properties</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Copy</attribute>
++        <attribute name="action">win.copy</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Select _All</attribute>
++        <attribute name="action">win.select-all</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">Save Current Settings as _Default</attribute>
++        <attribute name="action">win.save-settings</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_First Page</attribute>
++        <attribute name="action">win.go-first-page</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Last Page</attribute>
++        <attribute name="action">win.go-last-page</attribute>
++      </item>
++    </section>
++    <section id="bookmarks">
++      <item>
++        <attribute name="label" translatable="yes">_Add Bookmark</attribute>
++        <attribute name="action">win.add-bookmark</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Close</attribute>
++        <attribute name="action">win.close</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_About</attribute>
++        <attribute name="action">app.about</attribute>
++      </item>
++    </section>
++  </menu>
++</interface>
+Index: evince-3.10.3/shell/traditional-menus.ui
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ evince-3.10.3/shell/traditional-menus.ui	2014-04-28 15:33:25.034869346 +0200
+@@ -0,0 +1,230 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++  Copyright © 2014 Canonical Ltd.
++
++  This program is free software; you can redistribute it and/or modify
++  it under the terms of the GNU General Public License as published by
++  the Free Software Foundation; either version 3, or (at your option)
++  any later version.
++
++  This program is distributed in the hope conf it will be useful,
++  but WITHOUT ANY WARRANTY; without even the implied warranty of
++  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++  GNU General Public License for more details.
++
++  You should have received a copy of the GNU General Public License
++  along with this program; if not, write to the Free Software
++  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
++
++  Author: Lars Uebernickel <lars.uebernickel@canonical.com>
++-->
++<interface>
++  <menu id="menubar">
++    <submenu>
++      <attribute name="label" translatable="yes">_File</attribute>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Open…</attribute>
++          <attribute name="action">app.open</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;O</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">Op_en a Copy</attribute>
++          <attribute name="action">win.open-copy</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;N</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Save a Copy…</attribute>
++          <attribute name="action">win.save-copy</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;S</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">Send _To…</attribute>
++          <attribute name="action">win.send-to</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">Open Containing _Folder</attribute>
++          <attribute name="action">win.open-containing-folder</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">_Print…</attribute>
++          <attribute name="action">win.print</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;P</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">P_roperties…</attribute>
++          <attribute name="action">win.show-properties</attribute>
++          <attribute name="accel">&lt;Alt&gt;Return</attribute>
++        </item>
++      </section>
++      <item>
++        <link name="section" id="recent">
++        </link>
++      </item>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Close</attribute>
++          <attribute name="action">win.close</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;W</attribute>
++        </item>
++      </section>
++    </submenu>
++    <submenu>
++      <attribute name="label" translatable="yes">_Edit</attribute>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Copy</attribute>
++          <attribute name="action">win.copy</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;C</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">Select _All</attribute>
++          <attribute name="action">win.select-all</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;A</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Find</attribute>
++          <attribute name="action">win.find</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;F</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">Rotate _Left</attribute>
++          <attribute name="action">win.rotate-left</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;Left</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">Rotate _Right</attribute>
++          <attribute name="action">win.rotate-right</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;Right</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">Save Current Settings as _Default</attribute>
++          <attribute name="action">win.save-settings</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;T</attribute>
++        </item>
++      </section>
++    </submenu>
++    <submenu>
++      <attribute name="label" translatable="yes">_View</attribute>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Continuous</attribute>
++          <attribute name="action">win.continuous</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">_Dual</attribute>
++          <attribute name="action">win.dual-page</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">Side _Pane</attribute>
++          <attribute name="action">win.show-side-pane</attribute>
++          <attribute name="accel">F9</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Fullscreen</attribute>
++          <attribute name="action">win.fullscreen</attribute>
++          <attribute name="accel">F11</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">Pre_sentation</attribute>
++          <attribute name="action">win.presentation</attribute>
++          <attribute name="accel">F5</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">Zoom _In</attribute>
++          <attribute name="action">win.zoom-in</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;plus</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">Zoom _Out</attribute>
++          <attribute name="action">win.zoom-out</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;minus</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Odd Pages Left</attribute>
++          <attribute name="action">win.dual-odd-left</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">_Inverted Colors</attribute>
++          <attribute name="action">win.inverted-colors</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;I</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Reload</attribute>
++          <attribute name="action">win.reload</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;R</attribute>
++        </item>
++      </section>
++    </submenu>
++    <submenu>
++      <attribute name="label" translatable="yes">_Go</attribute>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Previous Page</attribute>
++          <attribute name="action">win.go-previous-page</attribute>
++          <attribute name="accel">p</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">_Next Page</attribute>
++          <attribute name="action">win.go-next-page</attribute>
++          <attribute name="accel">n</attribute>
++        </item>
++      </section>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_First Page</attribute>
++          <attribute name="action">win.go-first-page</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;Home</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">_Last Page</attribute>
++          <attribute name="action">win.go-last-page</attribute>
++          <attribute name="accel">&lt;Ctrl&gt;End</attribute>
++        </item>
++      </section>
++    </submenu>
++    <submenu id="bookmarks">
++        <attribute name="label" translatable="yes">_Bookmarks</attribute>
++        <section>
++          <item>
++            <attribute name="label" translatable="yes">_Add Bookmark</attribute>
++            <attribute name="action">win.add-bookmark</attribute>
++            <attribute name="accel">&lt;Ctrl&gt;D</attribute>
++          </item>
++        </section>
++    </submenu>
++    <submenu>
++      <attribute name="label" translatable="yes">_Help</attribute>
++      <section>
++        <item>
++          <attribute name="label" translatable="yes">_Help</attribute>
++          <attribute name="action">app.help</attribute>
++        </item>
++        <item>
++          <attribute name="label" translatable="yes">_About</attribute>
++          <attribute name="action">app.about</attribute>
++        </item>
++      </section>
++    </submenu>
++  </menu>
++</interface>
+Index: evince-3.10.3/po/POTFILES.in
+===================================================================
+--- evince-3.10.3.orig/po/POTFILES.in	2014-04-28 15:33:25.038869346 +0200
++++ evince-3.10.3/po/POTFILES.in	2014-04-28 15:33:25.034869346 +0200
+@@ -56,3 +56,6 @@
+ shell/ev-window-title.c
+ shell/main.c
+ [type: gettext/glade]shell/evince-appmenu.ui
++[type: gettext/glade]shell/menus.ui
++[type: gettext/glade]shell/traditional-menus.ui
++shell/ev-toolbar.c
+Index: evince-3.10.3/shell/popup-menus.ui
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ evince-3.10.3/shell/popup-menus.ui	2014-04-28 15:33:25.034869346 +0200
+@@ -0,0 +1,114 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++  Copyright © 2013 Canonical Ltd.
++
++  This program is free software; you can redistribute it and/or modify
++  it under the terms of the GNU General Public License as published by
++  the Free Software Foundation; either version 3, or (at your option)
++  any later version.
++
++  This program is distributed in the hope conf it will be useful,
++  but WITHOUT ANY WARRANTY; without even the implied warranty of
++  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++  GNU General Public License for more details.
++
++  You should have received a copy of the GNU General Public License
++  along with this program; if not, write to the Free Software
++  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
++
++  Author: Lars Uebernickel <lars.uebernickel@canonical.com>
++-->
++<interface>
++  <menu id="document-view-menu">
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Previous Page</attribute>
++        <attribute name="action">win.go-previous-page</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Next Page</attribute>
++        <attribute name="action">win.go-next-page</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Reload</attribute>
++        <attribute name="action">win.reload</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Auto_scroll</attribute>
++        <attribute name="action">win.auto-scroll</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Copy</attribute>
++        <attribute name="action">win.copy</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Select _All</attribute>
++        <attribute name="action">win.select-all</attribute>
++      </item>
++    </section>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">Open Containing _Folder</attribute>
++        <attribute name="action">win.open-containing-folder</attribute>
++      </item>
++    </section>
++  </menu>
++  <menu id="external-link-menu">
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Open Link</attribute>
++        <attribute name="action">win.open-link</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Copy Link Address</attribute>
++        <attribute name="action">win.copy-link-address</attribute>
++      </item>
++    </section>
++  </menu>
++  <menu id="internal-link-menu">
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Go To</attribute>
++        <attribute name="action">win.open-link</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Open in New _Window</attribute>
++        <attribute name="action">win.open-link-in-new-window</attribute>
++      </item>
++    </section>
++  </menu>
++  <menu id="image-menu">
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Save Image As…</attribute>
++        <attribute name="action">win.save-image</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">Copy _Image</attribute>
++        <attribute name="action">win.copy-image</attribute>
++      </item>
++    </section>
++  </menu>
++  <menu id="attachment-menu">
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Open Attachment</attribute>
++        <attribute name="action">win.open-attachment</attribute>
++      </item>
++      <item>
++        <attribute name="label" translatable="yes">_Save Attachment As…</attribute>
++        <attribute name="action">win.save-attachment</attribute>
++      </item>
++    </section>
++  </menu>
++  <menu id="annotation-menu">
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">Annotation Properties…</attribute>
++        <attribute name="action">win.show-annotation-properties</attribute>
++      </item>
++    </section>
++  </menu>
++</interface>

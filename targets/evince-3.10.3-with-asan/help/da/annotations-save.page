@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<page xmlns="http://projectmallard.org/1.0/" type="topic" style="task" id="annotations-save" xml:lang="da">
+<info>
+  <link type="guide" xref="index#annotations"/>
+ <desc>Sådan gemmer man sine annotationer.</desc>
+
+    <revision pkgversion="3.2" version="0.1" date="2011-09-05" status="final"/>
+    <credit type="author">
+      <name>Tiffany Antopolski</name>
+      <email>tiffany@antopolski.com</email>
+    </credit>
+    <license>
+      <p>Creative Commons Share Alike 3.0</p>
+    </license>
+</info>
+<title>Gem en kopi af en annoteret PDF</title>
+ <p>Sådan gemmer du en kopi af din annoterede PDF-fil, så den kan ses senere med <app>Dokumentfremviser</app> eller en anden PDF-fremviser som <em>understøtter annotationer</em>:</p>
+  <steps>
+   <item>
+     <p>Klik på <guiseq><gui>Fil</gui><gui>Gem kopi</gui></guiseq></p>
+   </item>
+   <item>
+     <p>Vælg et navn og en mappe, hvor filen skal gemmes, og tryk så på <gui>Gem</gui>. PDF-filen gemmes i den valgte mappe.</p>
+    </item>
+   </steps>
+   <p>Annotationer tilføjes ifølge PDF-specifikationen. Derfor er de fleste PDF-læsere i stand til at læse dem. Okular-dokumentfremviseren understøtter dem ikke. Men Adobe Reader kan gøre det.</p>
+
+</page>

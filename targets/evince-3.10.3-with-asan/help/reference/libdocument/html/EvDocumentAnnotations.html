@@ -1,0 +1,223 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Evince Document Library Reference Manual: EvDocumentAnnotations</title>
+<meta name="generator" content="DocBook XSL Stylesheets V1.78.1">
+<link rel="home" href="index.html" title="Evince Document Library Reference Manual">
+<link rel="up" href="document-interfaces.html" title="Part I. Document Interfaces">
+<link rel="prev" href="EvDocument.html" title="EvDocument">
+<link rel="next" href="EvDocumentAttachments.html" title="EvDocumentAttachments">
+<meta name="generator" content="GTK-Doc V1.19.1 (XML mode)">
+<link rel="stylesheet" href="style.css" type="text/css">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<table class="navigation" id="top" width="100%" summary="Navigation header" cellpadding="2" cellspacing="10"><tr valign="middle">
+<td width="100%" align="left">
+<a href="#" class="shortcut">Top</a>
+                   | 
+                  <a href="#EvDocumentAnnotations.description" class="shortcut">Description</a>
+                   | 
+                  <a href="#EvDocumentAnnotations.object-hierarchy" class="shortcut">Object Hierarchy</a>
+</td>
+<td><a accesskey="h" href="index.html"><img src="home.png" width="16" height="16" border="0" alt="Home"></a></td>
+<td><a accesskey="u" href="document-interfaces.html"><img src="up.png" width="16" height="16" border="0" alt="Up"></a></td>
+<td><a accesskey="p" href="EvDocument.html"><img src="left.png" width="16" height="16" border="0" alt="Prev"></a></td>
+<td><a accesskey="n" href="EvDocumentAttachments.html"><img src="right.png" width="16" height="16" border="0" alt="Next"></a></td>
+</tr></table>
+<div class="refentry">
+<a name="EvDocumentAnnotations"></a><div class="titlepage"></div>
+<div class="refnamediv"><table width="100%"><tr>
+<td valign="top">
+<h2><span class="refentrytitle"><a name="EvDocumentAnnotations.top_of_page"></a>EvDocumentAnnotations</span></h2>
+<p>EvDocumentAnnotations</p>
+</td>
+<td valign="top" align="right"></td>
+</tr></table></div>
+<div class="refsynopsisdiv">
+<a name="EvDocumentAnnotations.synopsis"></a><h2>Synopsis</h2>
+<a name="EvAnnotationsSaveMask"></a><pre class="synopsis">                    <a class="link" href="EvDocumentAnnotations.html#EvDocumentAnnotations-struct" title="EvDocumentAnnotations">EvDocumentAnnotations</a>;
+struct              <a class="link" href="EvDocumentAnnotations.html#EvDocumentAnnotationsInterface" title="struct EvDocumentAnnotationsInterface">EvDocumentAnnotationsInterface</a>;
+enum                <a class="link" href="EvDocumentAnnotations.html#EvAnnotationsSaveMask-enum" title="enum EvAnnotationsSaveMask">EvAnnotationsSaveMask</a>;
+<a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="returnvalue">EvMappingList</span></a> *     <a class="link" href="EvDocumentAnnotations.html#ev-document-annotations-get-annotations" title="ev_document_annotations_get_annotations ()">ev_document_annotations_get_annotations</a>
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvPage.html" title="EvPage"><span class="type">EvPage</span></a> *page</code></em>);
+<span class="returnvalue">void</span>                <a class="link" href="EvDocumentAnnotations.html#ev-document-annotations-add-annotation" title="ev_document_annotations_add_annotation ()">ev_document_annotations_add_annotation</a>
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvAnnotation.html" title="EvAnnotationText"><span class="type">EvAnnotation</span></a> *annot</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvDocument.html#EvRectangle"><span class="type">EvRectangle</span></a> *rect</code></em>);
+<span class="returnvalue">gboolean</span>            <a class="link" href="EvDocumentAnnotations.html#ev-document-annotations-can-add-annotation" title="ev_document_annotations_can_add_annotation ()">ev_document_annotations_can_add_annotation</a>
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>);
+<span class="returnvalue">gboolean</span>            <a class="link" href="EvDocumentAnnotations.html#ev-document-annotations-document-is-modified" title="ev_document_annotations_document_is_modified ()">ev_document_annotations_document_is_modified</a>
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>);
+<span class="returnvalue">void</span>                <a class="link" href="EvDocumentAnnotations.html#ev-document-annotations-save-annotation" title="ev_document_annotations_save_annotation ()">ev_document_annotations_save_annotation</a>
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvAnnotation.html" title="EvAnnotationText"><span class="type">EvAnnotation</span></a> *annot</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html#EvAnnotationsSaveMask"><span class="type">EvAnnotationsSaveMask</span></a> mask</code></em>);
+</pre>
+</div>
+<div class="refsect1">
+<a name="EvDocumentAnnotations.object-hierarchy"></a><h2>Object Hierarchy</h2>
+<pre class="synopsis">
+  GInterface
+   +----EvDocumentAnnotations
+</pre>
+<pre class="synopsis">
+  GFlags
+   +----EvAnnotationsSaveMask
+</pre>
+</div>
+<div class="refsect1">
+<a name="EvDocumentAnnotations.description"></a><h2>Description</h2>
+<p>
+</p>
+</div>
+<div class="refsect1">
+<a name="EvDocumentAnnotations.details"></a><h2>Details</h2>
+<div class="refsect2">
+<a name="EvDocumentAnnotations-struct"></a><h3>EvDocumentAnnotations</h3>
+<pre class="programlisting">typedef struct _EvDocumentAnnotations EvDocumentAnnotations;</pre>
+<p>
+</p>
+</div>
+<hr>
+<div class="refsect2">
+<a name="EvDocumentAnnotationsInterface"></a><h3>struct EvDocumentAnnotationsInterface</h3>
+<pre class="programlisting">struct EvDocumentAnnotationsInterface {
+	GTypeInterface base_iface;
+
+	/* Methods  */
+	EvMappingList *(* get_annotations)      (EvDocumentAnnotations *document_annots,
+						 EvPage                *page);
+	gboolean       (* document_is_modified) (EvDocumentAnnotations *document_annots);
+	void           (* add_annotation)       (EvDocumentAnnotations *document_annots,
+						 EvAnnotation          *annot,
+						 EvRectangle           *rect);
+	void           (* save_annotation)      (EvDocumentAnnotations *document_annots,
+						 EvAnnotation          *annot,
+						 EvAnnotationsSaveMask  mask);
+};
+</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="EvAnnotationsSaveMask-enum"></a><h3>enum EvAnnotationsSaveMask</h3>
+<pre class="programlisting">typedef enum {
+	EV_ANNOTATIONS_SAVE_NONE          = 0,
+	EV_ANNOTATIONS_SAVE_CONTENTS      = 1 &lt;&lt; 0,
+	EV_ANNOTATIONS_SAVE_COLOR         = 1 &lt;&lt; 1,
+
+	/* Markup Annotations */
+	EV_ANNOTATIONS_SAVE_LABEL         = 1 &lt;&lt; 2,
+	EV_ANNOTATIONS_SAVE_OPACITY       = 1 &lt;&lt; 3,
+	EV_ANNOTATIONS_SAVE_POPUP_RECT    = 1 &lt;&lt; 4,
+	EV_ANNOTATIONS_SAVE_POPUP_IS_OPEN = 1 &lt;&lt; 5,
+
+	/* Text Annotations */
+	EV_ANNOTATIONS_SAVE_TEXT_IS_OPEN  = 1 &lt;&lt; 6,
+	EV_ANNOTATIONS_SAVE_TEXT_ICON     = 1 &lt;&lt; 7,
+
+	/* Attachment Annotations */
+	EV_ANNOTATIONS_SAVE_ATTACHMENT    = 1 &lt;&lt; 8,
+
+	/* Save all */
+	EV_ANNOTATIONS_SAVE_ALL           = (1 &lt;&lt; 9) - 1
+} EvAnnotationsSaveMask;
+</pre>
+<div class="variablelist"><table border="0" class="variablelist">
+<colgroup>
+<col align="left" valign="top">
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-NONE:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_NONE</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-CONTENTS:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_CONTENTS</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-COLOR:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_COLOR</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-LABEL:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_LABEL</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-OPACITY:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_OPACITY</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-POPUP-RECT:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_POPUP_RECT</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-POPUP-IS-OPEN:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_POPUP_IS_OPEN</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-TEXT-IS-OPEN:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_TEXT_IS_OPEN</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-TEXT-ICON:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_TEXT_ICON</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-ATTACHMENT:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_ATTACHMENT</code></span></p></td>
+<td></td>
+</tr>
+<tr>
+<td><p><a name="EV-ANNOTATIONS-SAVE-ALL:CAPS"></a><span class="term"><code class="literal">EV_ANNOTATIONS_SAVE_ALL</code></span></p></td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-annotations-get-annotations"></a><h3>ev_document_annotations_get_annotations ()</h3>
+<pre class="programlisting"><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="returnvalue">EvMappingList</span></a> *     ev_document_annotations_get_annotations
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvPage.html" title="EvPage"><span class="type">EvPage</span></a> *page</code></em>);</pre>
+<p>
+</p>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-annotations-add-annotation"></a><h3>ev_document_annotations_add_annotation ()</h3>
+<pre class="programlisting"><span class="returnvalue">void</span>                ev_document_annotations_add_annotation
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvAnnotation.html" title="EvAnnotationText"><span class="type">EvAnnotation</span></a> *annot</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvDocument.html#EvRectangle"><span class="type">EvRectangle</span></a> *rect</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-annotations-can-add-annotation"></a><h3>ev_document_annotations_can_add_annotation ()</h3>
+<pre class="programlisting"><span class="returnvalue">gboolean</span>            ev_document_annotations_can_add_annotation
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-annotations-document-is-modified"></a><h3>ev_document_annotations_document_is_modified ()</h3>
+<pre class="programlisting"><span class="returnvalue">gboolean</span>            ev_document_annotations_document_is_modified
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-document-annotations-save-annotation"></a><h3>ev_document_annotations_save_annotation ()</h3>
+<pre class="programlisting"><span class="returnvalue">void</span>                ev_document_annotations_save_annotation
+                                                        (<em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html" title="EvDocumentAnnotations"><span class="type">EvDocumentAnnotations</span></a> *document_annots</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvAnnotation.html" title="EvAnnotationText"><span class="type">EvAnnotation</span></a> *annot</code></em>,
+                                                         <em class="parameter"><code><a class="link" href="EvDocumentAnnotations.html#EvAnnotationsSaveMask"><span class="type">EvAnnotationsSaveMask</span></a> mask</code></em>);</pre>
+</div>
+</div>
+</div>
+<div class="footer">
+<hr>
+          Generated by GTK-Doc V1.19.1</div>
+</body>
+</html>

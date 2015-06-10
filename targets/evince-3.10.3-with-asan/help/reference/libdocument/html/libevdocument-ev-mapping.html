@@ -1,0 +1,229 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Evince Document Library Reference Manual: ev-mapping</title>
+<meta name="generator" content="DocBook XSL Stylesheets V1.78.1">
+<link rel="home" href="index.html" title="Evince Document Library Reference Manual">
+<link rel="up" href="document-data.html" title="Part II. Document Data">
+<link rel="prev" href="libevdocument-ev-link.html" title="ev-link">
+<link rel="next" href="EvPage.html" title="EvPage">
+<meta name="generator" content="GTK-Doc V1.19.1 (XML mode)">
+<link rel="stylesheet" href="style.css" type="text/css">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<table class="navigation" id="top" width="100%" summary="Navigation header" cellpadding="2" cellspacing="10"><tr valign="middle">
+<td width="100%" align="left">
+<a href="#" class="shortcut">Top</a>
+                   | 
+                  <a href="#libevdocument-ev-mapping.description" class="shortcut">Description</a>
+                   | 
+                  <a href="#libevdocument-ev-mapping.object-hierarchy" class="shortcut">Object Hierarchy</a>
+</td>
+<td><a accesskey="h" href="index.html"><img src="home.png" width="16" height="16" border="0" alt="Home"></a></td>
+<td><a accesskey="u" href="document-data.html"><img src="up.png" width="16" height="16" border="0" alt="Up"></a></td>
+<td><a accesskey="p" href="libevdocument-ev-link.html"><img src="left.png" width="16" height="16" border="0" alt="Prev"></a></td>
+<td><a accesskey="n" href="EvPage.html"><img src="right.png" width="16" height="16" border="0" alt="Next"></a></td>
+</tr></table>
+<div class="refentry">
+<a name="libevdocument-ev-mapping"></a><div class="titlepage"></div>
+<div class="refnamediv"><table width="100%"><tr>
+<td valign="top">
+<h2><span class="refentrytitle"><a name="libevdocument-ev-mapping.top_of_page"></a>ev-mapping</span></h2>
+<p>ev-mapping</p>
+</td>
+<td valign="top" align="right"></td>
+</tr></table></div>
+<div class="refsynopsisdiv">
+<a name="libevdocument-ev-mapping.synopsis"></a><h2>Synopsis</h2>
+<a name="EvMappingList"></a><pre class="synopsis">struct              <a class="link" href="libevdocument-ev-mapping.html#EvMapping" title="struct EvMapping">EvMapping</a>;
+                    <a class="link" href="libevdocument-ev-mapping.html#EvMappingList-struct" title="EvMappingList">EvMappingList</a>;
+<a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="returnvalue">EvMappingList</span></a> *     <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-new" title="ev_mapping_list_new ()">ev_mapping_list_new</a>                 (<em class="parameter"><code><span class="type">guint</span> page</code></em>,
+                                                         <em class="parameter"><code><span class="type">GList</span> *list</code></em>,
+                                                         <em class="parameter"><code><span class="type">GDestroyNotify</span> data_destroy_func</code></em>);
+<a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="returnvalue">EvMappingList</span></a> *     <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-ref" title="ev_mapping_list_ref ()">ev_mapping_list_ref</a>                 (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);
+<span class="returnvalue">void</span>                <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-unref" title="ev_mapping_list_unref ()">ev_mapping_list_unref</a>               (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);
+<span class="returnvalue">gpointer</span>            <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-get-data" title="ev_mapping_list_get_data ()">ev_mapping_list_get_data</a>            (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>,
+                                                         <em class="parameter"><code><span class="type">gdouble</span> x</code></em>,
+                                                         <em class="parameter"><code><span class="type">gdouble</span> y</code></em>);
+<span class="returnvalue">GList</span> *             <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-get-list" title="ev_mapping_list_get_list ()">ev_mapping_list_get_list</a>            (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);
+<span class="returnvalue">guint</span>               <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-get-page" title="ev_mapping_list_get_page ()">ev_mapping_list_get_page</a>            (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);
+<span class="returnvalue">guint</span>               <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-length" title="ev_mapping_list_length ()">ev_mapping_list_length</a>              (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);
+<a class="link" href="libevdocument-ev-mapping.html#EvMapping" title="struct EvMapping"><span class="returnvalue">EvMapping</span></a> *         <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-nth" title="ev_mapping_list_nth ()">ev_mapping_list_nth</a>                 (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>,
+                                                         <em class="parameter"><code><span class="type">guint</span> n</code></em>);
+<a class="link" href="libevdocument-ev-mapping.html#EvMapping" title="struct EvMapping"><span class="returnvalue">EvMapping</span></a> *         <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-find" title="ev_mapping_list_find ()">ev_mapping_list_find</a>                (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>,
+                                                         <em class="parameter"><code><span class="type">gconstpointer</span> data</code></em>);
+<a class="link" href="libevdocument-ev-mapping.html#EvMapping" title="struct EvMapping"><span class="returnvalue">EvMapping</span></a> *         <a class="link" href="libevdocument-ev-mapping.html#ev-mapping-list-find-custom" title="ev_mapping_list_find_custom ()">ev_mapping_list_find_custom</a>         (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>,
+                                                         <em class="parameter"><code><span class="type">gconstpointer</span> data</code></em>,
+                                                         <em class="parameter"><code><span class="type">GCompareFunc</span> func</code></em>);
+</pre>
+</div>
+<div class="refsect1">
+<a name="libevdocument-ev-mapping.object-hierarchy"></a><h2>Object Hierarchy</h2>
+<pre class="synopsis">
+  GBoxed
+   +----EvMappingList
+</pre>
+</div>
+<div class="refsect1">
+<a name="libevdocument-ev-mapping.description"></a><h2>Description</h2>
+<p>
+</p>
+</div>
+<div class="refsect1">
+<a name="libevdocument-ev-mapping.details"></a><h2>Details</h2>
+<div class="refsect2">
+<a name="EvMapping"></a><h3>struct EvMapping</h3>
+<pre class="programlisting">struct EvMapping {
+	EvRectangle area;
+	gpointer    data;
+};
+</pre>
+<p>
+</p>
+</div>
+<hr>
+<div class="refsect2">
+<a name="EvMappingList-struct"></a><h3>EvMappingList</h3>
+<pre class="programlisting">typedef struct _EvMappingList EvMappingList;</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-new"></a><h3>ev_mapping_list_new ()</h3>
+<pre class="programlisting"><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="returnvalue">EvMappingList</span></a> *     ev_mapping_list_new                 (<em class="parameter"><code><span class="type">guint</span> page</code></em>,
+                                                         <em class="parameter"><code><span class="type">GList</span> *list</code></em>,
+                                                         <em class="parameter"><code><span class="type">GDestroyNotify</span> data_destroy_func</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-ref"></a><h3>ev_mapping_list_ref ()</h3>
+<pre class="programlisting"><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="returnvalue">EvMappingList</span></a> *     ev_mapping_list_ref                 (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-unref"></a><h3>ev_mapping_list_unref ()</h3>
+<pre class="programlisting"><span class="returnvalue">void</span>                ev_mapping_list_unref               (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-get-data"></a><h3>ev_mapping_list_get_data ()</h3>
+<pre class="programlisting"><span class="returnvalue">gpointer</span>            ev_mapping_list_get_data            (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>,
+                                                         <em class="parameter"><code><span class="type">gdouble</span> x</code></em>,
+                                                         <em class="parameter"><code><span class="type">gdouble</span> y</code></em>);</pre>
+<div class="variablelist"><table border="0" class="variablelist">
+<colgroup>
+<col align="left" valign="top">
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>mapping_list</code></em> :</span></p></td>
+<td>an <a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a>
+</td>
+</tr>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>x</code></em> :</span></p></td>
+<td>X coordinate</td>
+</tr>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>y</code></em> :</span></p></td>
+<td>Y coordinate</td>
+</tr>
+<tr>
+<td><p><span class="term"><span class="emphasis"><em>Returns</em></span> :</span></p></td>
+<td>the data of a mapping in the list at coordinates (x, y). <span class="annotation">[<acronym title="Don't free data after the code is done."><span class="acronym">transfer none</span></acronym>]</span>
+</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-get-list"></a><h3>ev_mapping_list_get_list ()</h3>
+<pre class="programlisting"><span class="returnvalue">GList</span> *             ev_mapping_list_get_list            (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-get-page"></a><h3>ev_mapping_list_get_page ()</h3>
+<pre class="programlisting"><span class="returnvalue">guint</span>               ev_mapping_list_get_page            (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-length"></a><h3>ev_mapping_list_length ()</h3>
+<pre class="programlisting"><span class="returnvalue">guint</span>               ev_mapping_list_length              (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-nth"></a><h3>ev_mapping_list_nth ()</h3>
+<pre class="programlisting"><a class="link" href="libevdocument-ev-mapping.html#EvMapping" title="struct EvMapping"><span class="returnvalue">EvMapping</span></a> *         ev_mapping_list_nth                 (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>,
+                                                         <em class="parameter"><code><span class="type">guint</span> n</code></em>);</pre>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-find"></a><h3>ev_mapping_list_find ()</h3>
+<pre class="programlisting"><a class="link" href="libevdocument-ev-mapping.html#EvMapping" title="struct EvMapping"><span class="returnvalue">EvMapping</span></a> *         ev_mapping_list_find                (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>,
+                                                         <em class="parameter"><code><span class="type">gconstpointer</span> data</code></em>);</pre>
+<div class="variablelist"><table border="0" class="variablelist">
+<colgroup>
+<col align="left" valign="top">
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>mapping_list</code></em> :</span></p></td>
+<td>an <a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a>
+</td>
+</tr>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>data</code></em> :</span></p></td>
+<td>mapping data to find</td>
+</tr>
+<tr>
+<td><p><span class="term"><span class="emphasis"><em>Returns</em></span> :</span></p></td>
+<td>an <a class="link" href="libevdocument-ev-mapping.html#EvMapping" title="struct EvMapping"><span class="type">EvMapping</span></a>. <span class="annotation">[<acronym title="Don't free data after the code is done."><span class="acronym">transfer none</span></acronym>]</span>
+</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<hr>
+<div class="refsect2">
+<a name="ev-mapping-list-find-custom"></a><h3>ev_mapping_list_find_custom ()</h3>
+<pre class="programlisting"><a class="link" href="libevdocument-ev-mapping.html#EvMapping" title="struct EvMapping"><span class="returnvalue">EvMapping</span></a> *         ev_mapping_list_find_custom         (<em class="parameter"><code><a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a> *mapping_list</code></em>,
+                                                         <em class="parameter"><code><span class="type">gconstpointer</span> data</code></em>,
+                                                         <em class="parameter"><code><span class="type">GCompareFunc</span> func</code></em>);</pre>
+<div class="variablelist"><table border="0" class="variablelist">
+<colgroup>
+<col align="left" valign="top">
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>mapping_list</code></em> :</span></p></td>
+<td>an <a class="link" href="libevdocument-ev-mapping.html#EvMappingList"><span class="type">EvMappingList</span></a>
+</td>
+</tr>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>data</code></em> :</span></p></td>
+<td>mapping data to find</td>
+</tr>
+<tr>
+<td><p><span class="term"><em class="parameter"><code>func</code></em> :</span></p></td>
+<td>function to use for equality check. <span class="annotation">[<acronym title="The callback is valid only during the call to the method."><span class="acronym">scope call</span></acronym>]</span>
+</td>
+</tr>
+<tr>
+<td><p><span class="term"><span class="emphasis"><em>Returns</em></span> :</span></p></td>
+<td>an <a class="link" href="libevdocument-ev-mapping.html#EvMapping" title="struct EvMapping"><span class="type">EvMapping</span></a>. <span class="annotation">[<acronym title="Don't free data after the code is done."><span class="acronym">transfer none</span></acronym>]</span>
+</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+</div>
+</div>
+<div class="footer">
+<hr>
+          Generated by GTK-Doc V1.19.1</div>
+</body>
+</html>

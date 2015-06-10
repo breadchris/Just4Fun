@@ -1,0 +1,29 @@
+breadchris@ubuntu:~/Documents/Break/evince-3.10.3$ make
+make  all-recursive
+make[1]: Entering directory `/home/breadchris/Documents/Break/evince-3.10.3'
+Making all in cut-n-paste
+make[2]: Entering directory `/home/breadchris/Documents/Break/evince-3.10.3/cut-n-paste'
+Making all in smclient
+make[3]: Entering directory `/home/breadchris/Documents/Break/evince-3.10.3/cut-n-paste/smclient'
+make[3]: Nothing to be done for `all'.
+make[3]: Leaving directory `/home/breadchris/Documents/Break/evince-3.10.3/cut-n-paste/smclient'
+Making all in gimpcellrenderertoggle
+make[3]: Entering directory `/home/breadchris/Documents/Break/evince-3.10.3/cut-n-paste/gimpcellrenderertoggle'
+make[3]: Nothing to be done for `all'.
+make[3]: Leaving directory `/home/breadchris/Documents/Break/evince-3.10.3/cut-n-paste/gimpcellrenderertoggle'
+Making all in synctex
+make[3]: Entering directory `/home/breadchris/Documents/Break/evince-3.10.3/cut-n-paste/synctex'
+  CC       libsynctex_la-synctex_parser_utils.lo
+synctex_parser_utils.c:106:29: error: format string is not a string literal [-Werror,-Wformat-nonliteral]
+        result += vfprintf(stderr, reason, arg);
+                                   ^~~~~~
+1 error generated.
+make[3]: *** [libsynctex_la-synctex_parser_utils.lo] Error 1
+make[3]: Leaving directory `/home/breadchris/Documents/Break/evince-3.10.3/cut-n-paste/synctex'
+make[2]: *** [all-recursive] Error 1
+make[2]: Leaving directory `/home/breadchris/Documents/Break/evince-3.10.3/cut-n-paste'
+make[1]: *** [all-recursive] Error 1
+make[1]: Leaving directory `/home/breadchris/Documents/Break/evince-3.10.3'
+make: *** [all] Error 2
+breadchris@ubuntu:~/Documents/Break/evince-3.10.3$ ls
+
