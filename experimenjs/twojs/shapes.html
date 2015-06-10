@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Playing with two js</title>
+        <link rel="stylesheet" href="http://bootswatch.com/paper/bootstrap.min.css" type="text/css" />
+        <script type="text/javascript" src="https://raw.githubusercontent.com/jonobr1/two.js/master/build/two.js"></script>
+    </head>
+    <body>
+        <div class="container">
+            <h1 class="page-header">Shapes</h1>
+            <div class="row">
+                <div id="draw-shapes">
+                    <div class="two-container" style="height:200px">
+                    </div>
+                </div>
+                <br />
+                <div id="face">
+                    <div class="two-container" style="height:200px">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    <!-- Main Script -->
+    <script>
+    // Make an instance of two and place it on the page.
+    var elem = document.getElementById('draw-shapes').children[0];
+    var params = { width: 285, height: 200 };
+    var two = new Two(params).appendTo(elem);
+    
+    // two has convenience methods to create shapes.
+    var circle = two.makeCircle(72, 100, 50);
+    var rect = two.makeRectangle(213, 100, 100, 100);
+    
+    // The object returned has many stylable properties:
+    circle.fill = '#FF8000';
+    circle.stroke = 'orangered'; // Accepts all valid css color
+    circle.linewidth = 5;
+    
+    rect.fill = 'rgb(0, 200, 255)';
+    rect.opacity = 0.75;
+    rect.noStroke();
+    
+    two.update();
+    
+    elem = document.getElementById('face').children[0];
+    params = { width: 400, height: 400 };
+    two = new Two(params).appendTo(elem);
+    
+    // two has convenience methods to create shapes.
+    var eyeLeft = two.makeCircle(50, 100, );
+    var eyeRight = two.makeCircle(200, 100, 10);
+    var mouth = two.makeRectangle(150, 200, 200, 50);
+    
+    // The object returned has many stylable properties:
+    eyeLeft.fill = 'rgb(0, 200, 255)';
+    eyeLeft.stroke = 'blue'; // Accepts all valid css color
+    eyeLeft.linewidth = 5;
+    eyeRight.fill = 'rgb(0, 200, 255)';
+    eyeRight.stroke = 'blue'; // Accepts all valid css color
+    eyeRight.linewidth = 5;
+    
+    rect.fill = 'orangered';
+    rect.opacity = 0.75;
+    rect.noStroke();
+    
+    // Don't forget to tell two to render everything
+    two.update();
+</script>
+</html>

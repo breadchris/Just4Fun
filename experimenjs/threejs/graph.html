@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sandbox</title>    
+    <style>
+    	body {
+    		background-color: #000;
+    		overflow: hidden;
+    	}
+    </style>
+</head>
+<body>
+    <div id="canvas"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r70/three.js"></script>
+    <script src="//raw.githubusercontent.com/mrdoob/three.js/master/examples/js/renderers/Projector.js"></script>
+    <script src="//raw.githubusercontent.com/mrdoob/three.js/master/examples/js/renderers/CanvasRenderer.js"></script>
+    <script src="//raw.githubusercontent.com/mrdoob/three.js/master/examples/js/Detector.js"></script>
+    <script>
+		var scene;
+		var camera;
+		var renderer;
+		var triangleMesh;
+		var squareMesh;
+
+		initializeScene();
+		animateScene();
+		
+		function initializeScene() {
+			if (Detector.webgl) {
+				renderer = new THREE.WebGLRenderer({antialias: true});
+			} else {
+				renderer = new THREE.CanvasRenderer();
+			}
+				
+			renderer.setClearColor(0x000000, 1);
+			canvasWidth = window.innerWidth;
+			canvasHeight = window.innerHeight;
+			
+			renderer.setSize(canvasWidth, canvasHeight);
+			document.getElementById("canvas").appendChild(renderer.domElement);
+			
+			scene = new THREE.Scene();
+			
+			camera = new THREE.PerspectiveCamera(45, canvasWidth / canvasHeight, 1, 100);
+			camera.position.set(0, 0, 10);
+			camera.lookAt(scene.position);
+			scene.add(camera);
+			
+			var triangle = new THREE.Geometry();
+			triangle.vertices.push(new THREE.Vector3(   0,  1.0, 0));
+			triangle.vertices.push(new THREE.Vector3(-1.0, -1.0, 0));
+			triangle.vertices.push(new THREE.Vector3( 1.0, -1.0, 0));
+			triangle.faces.push(new THREE.Face3(0, 1, 2));
+			
+			triangle.faces[0].vertexColors[0] = new THREE.Color(0xFF0000);
+			triangle.faces[0].vertexColors[1] = new THREE.Color(0x00FF00);
+			triangle.faces[0].vertexColors[2] = new THREE.Color(0x0000FF);
+			
+			var triangleMaterial = new THREE.MeshBasicMaterial({
+				vertexColors: THREE.VertexColors,
+				side: THREE.DoubleSide
+			});
+			
+			triangleMesh = new THREE.Mesh(triangle, triangleMaterial);
+			triangleMesh.position.set(-1.5, 0, 4.0);
+			scene.add(triangleMesh);
+			
+			var square = new THREE.Geometry();
+			square.vertices.push(new THREE.Vector3(0, 1.0 ,0));
+			square.vertices.push(new THREE.Vector3(0, -1.0 ,0));
+			square.vertices.push(new THREE.Vector3(1.0, -1.0 ,0));
+			square.vertices.push(new THREE.Vector3(1.0, 1.0 ,0));
+			square.faces.push(new THREE.Face3(0, 1, 2));
+			square.faces.push(new THREE.Face3(0, 2, 3));
+			
+			var squareMaterial = new THREE.MeshBasicMaterial({
+				color: 0xFF00FF,
+				side: THREE.DoubleSide
+			});
+			
+			squareMesh = new THREE.Mesh(square, squareMaterial);
+			squareMesh.position.set(1.5, 0, 4.0);
+			scene.add(squareMesh);
+		}
+
+		function animateScene() {
+			triangleMesh.rotation.y += 0.1;
+			
+			squareMesh.rotation.x -= 0.075;
+			requestAnimationFrame(animateScene);
+			renderScene();
+		}
+		
+		function renderScene() {
+			renderer.render(scene, camera);
+		}
+		
+    </script>
+</body>
+</html> 
