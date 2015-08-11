@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Sandvich</string>
+    <string name="action_settings">Settings</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="title_activity_make_sandwich">MakeSandwich</string>
+    <string name="title_activity_drive">Drive</string>
+    <string name="title_activity_connection_settings">ConnectionSettings</string>
+    <string name="title_activity_settings">Settings</string>
+
+</resources>
