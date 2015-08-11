@@ -1,0 +1,14 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android" >
+    
+    <item android:id="@+id/ChangeZoom"
+          android:title="Change Zoom" />
+    <item android:id="@+id/Change_IP"
+          android:title="Change IP Address" />
+    <item android:id="@+id/Change_Port"
+          android:title="Change Port" />
+    <item android:id="@+id/EndServer"
+          android:title="End Server" />
+    <item android:id="@+id/Help"
+          android:title="Help" />
+
+</menu>
