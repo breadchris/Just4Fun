@@ -1,0 +1,83 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Machine>MUSTAFA</Machine>
+    <WindowsUser>christopher</WindowsUser>
+    <SolutionConfiguration>Debug|AnyCPU</SolutionConfiguration>
+    <PackageArchitecture>neutral</PackageArchitecture>
+    <PackageIdentityName>896d7ba4-7406-473e-bcdf-4b35ad915119</PackageIdentityName>
+    <RegisteredManifestChecksum>31235FE7201B199F64EAA170282E7845C8834A6240299D48E2F4899F76D01CC1</RegisteredManifestChecksum>
+    <RegisteredPackageMoniker>896d7ba4-7406-473e-bcdf-4b35ad915119_1.0.0.0_neutral__zypsts1h9spw8</RegisteredPackageMoniker>
+    <RegisteredUserModeAppID>896d7ba4-7406-473e-bcdf-4b35ad915119_zypsts1h9spw8!App</RegisteredUserModeAppID>
+    <RegisteredPackageID>896d7ba4-7406-473e-bcdf-4b35ad915119</RegisteredPackageID>
+    <RegisteredPackagePublisher>CN=christopher</RegisteredPackagePublisher>
+    <RegisteredVersion>1.0.0.0</RegisteredVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <AppXManifest Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\bin\Debug\AppxManifest.xml">
+      <PackagePath>AppxManifest.xml</PackagePath>
+      <ReRegisterAppIfChanged>true</ReRegisterAppIfChanged>
+      <Modified>2014-03-22T01:56:08.233</Modified>
+    </AppXManifest>
+  </ItemGroup>
+  <ItemGroup>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\bin\Debug\App2.exe">
+      <PackagePath>App2.exe</PackagePath>
+      <Modified>2014-03-22T01:56:08.100</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\DataModel\SampleData.json">
+      <PackagePath>DataModel\SampleData.json</PackagePath>
+      <Modified>2014-03-22T01:54:25.308</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\Assets\Logo.scale-100.png">
+      <PackagePath>Assets\Logo.scale-100.png</PackagePath>
+      <ReRegisterAppIfChanged>true</ReRegisterAppIfChanged>
+      <Modified>2013-07-23T10:01:02.000</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\Assets\SmallLogo.scale-100.png">
+      <PackagePath>Assets\SmallLogo.scale-100.png</PackagePath>
+      <ReRegisterAppIfChanged>true</ReRegisterAppIfChanged>
+      <Modified>2013-07-23T10:01:02.000</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\Assets\SplashScreen.scale-100.png">
+      <PackagePath>Assets\SplashScreen.scale-100.png</PackagePath>
+      <ReRegisterAppIfChanged>true</ReRegisterAppIfChanged>
+      <Modified>2013-07-23T10:01:02.000</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\Assets\StoreLogo.scale-100.png">
+      <PackagePath>Assets\StoreLogo.scale-100.png</PackagePath>
+      <ReRegisterAppIfChanged>true</ReRegisterAppIfChanged>
+      <Modified>2013-07-23T10:01:02.000</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\Assets\LightGray.png">
+      <PackagePath>Assets\LightGray.png</PackagePath>
+      <Modified>2013-07-23T10:01:02.000</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\Assets\MediumGray.png">
+      <PackagePath>Assets\MediumGray.png</PackagePath>
+      <Modified>2013-07-23T10:01:02.000</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\Assets\DarkGray.png">
+      <PackagePath>Assets\DarkGray.png</PackagePath>
+      <Modified>2013-07-23T10:01:02.000</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\bin\Debug\App.xbf">
+      <PackagePath>App.xbf</PackagePath>
+      <Modified>2014-03-22T01:56:07.928</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\bin\Debug\ItemsPage.xbf">
+      <PackagePath>ItemsPage.xbf</PackagePath>
+      <Modified>2014-03-22T01:56:07.929</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\bin\Debug\SplitPage.xbf">
+      <PackagePath>SplitPage.xbf</PackagePath>
+      <Modified>2014-03-22T01:56:07.929</Modified>
+    </AppxPackagedFile>
+    <AppxPackagedFile Include="C:\Users\christopher\Documents\Coding\WindowsStoreApps\App2\App2\bin\Debug\resources.pri">
+      <PackagePath>resources.pri</PackagePath>
+      <Modified>2014-03-22T01:56:08.151</Modified>
+    </AppxPackagedFile>
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+</Project>

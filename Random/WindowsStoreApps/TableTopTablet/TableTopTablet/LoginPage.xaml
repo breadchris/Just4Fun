@@ -1,0 +1,80 @@
+﻿<Page
+    x:Name="pageRoot"
+    x:Class="TableTopTablet.LoginPage"
+    DataContext="{Binding DefaultViewModel, RelativeSource={RelativeSource Self}}"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:TableTopTablet"
+    xmlns:common="using:TableTopTablet.Common"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Page.TopAppBar>
+        <CommandBar>
+            <AppBarButton Label="Connection Settings" Click="ConnectionSettingsButton_Click" Icon="FourBars" />
+        </CommandBar>
+    </Page.TopAppBar>
+    <StackPanel Background="#FF8D0C8D">
+        <ContentControl  x:Name="mainScreen" Grid.Column="1"  Grid.ColumnSpan="2" RenderTransformOrigin="0.677,0.507" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+            <Grid x:Name="Ui" Margin="0" Height="765">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="auto"></RowDefinition>
+                    <RowDefinition Height="100"></RowDefinition>
+                    <RowDefinition Height="*"></RowDefinition>
+                    <RowDefinition Height="*"></RowDefinition>
+                    <RowDefinition Height="*" ></RowDefinition>
+                    <RowDefinition Height="*"></RowDefinition>
+                    <RowDefinition Height="auto"></RowDefinition>
+                    <RowDefinition Height="*"></RowDefinition>
+                </Grid.RowDefinitions>
+                <Image Height="70" Grid.Row="0" Grid.Column="0" Source="Image4.png" Stretch="Fill" Width="423" />
+                <TextBlock  Grid.Row="2"   FontFamily="Segoe UI Light" FontSize="26.667" TextAlignment="Center"><Run Text="Welcome to"/><LineBreak/><Run FontSize="32" Text="Table Top Tablet"/></TextBlock>
+                <Button Grid.Row="3" Content="Register"  Height="50"   Width="313" Background="#FF560A5F" Foreground="White" BorderBrush="#FF898989" HorizontalAlignment="Center" FontFamily="Segoe UI Light" FontSize="18.667" Click="RegisterPopupButton_Click"/>
+                <Button VerticalAlignment="Top" Content="Sign in" Grid.Row="4" Height="50"   Width="313"  Background="#FF700B7C"  Foreground="#FFF9F7F7"  BorderBrush="#FF898989"  HorizontalAlignment="Center"   FontSize="18.667" FontFamily="Segoe UI Light" Click="SignInPopupButton_Click"/>
+                <Image  Height="67" VerticalAlignment="Top" Grid.Row="5" Source="Image1.png" Width="54" />
+            </Grid>
+        </ContentControl>
+        <ContentControl Grid.Column="0"  x:Name="loginContainer" Margin="0,-480,0,0">
+            <Popup x:Name="loginControl" IsOpen="False" >
+                <StackPanel Orientation="Vertical" Background="#FF1212FF" Height="400" x:Name="loginPopup" Margin="0" >
+                    <StackPanel Margin="0,40,0,0">
+                        <TextBlock Text="Sign In With an Account"  HorizontalAlignment="Center" Foreground="White" FontSize="25" Style="{StaticResource SubheaderTextBlockStyle}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,50" HorizontalAlignment="Center">
+                        <TextBlock Text="Username" Foreground="White" FontSize="25" Style="{StaticResource BodyTextBlockStyle}" Margin="0,3" Width="114" />
+                        <TextBox x:Name="UsernameTextBox" IsSpellCheckEnabled="True"  Height="30" Margin="5,1,0,1" Width="400" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="Password" Foreground="White"  FontSize="25" Style="{StaticResource BodyTextBlockStyle}" Margin="0,3" />
+                        <PasswordBox  x:Name="PasswordTextBox"  IsPasswordRevealButtonEnabled="True" Height="30" Margin="25,1,0,1"  Width="400"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,50" HorizontalAlignment="Center">
+                        <Button x:Name="loginclick" Click="LoginInButton_Click" Foreground="White"   Width="100" Content="Login" Background="#FF0A0AC1"></Button>
+                        <Button x:Name="cancel" Click="LoginCancelButton_Click"   Foreground="White"  Width="100" Content="Cancel" Background="#FF0A0AC1"></Button>
+                    </StackPanel>
+                </StackPanel>
+            </Popup>
+        </ContentControl>
+        <ContentControl Grid.Column="0"  x:Name="registerContainer" Margin="0,-480,0,0">
+            <Popup x:Name="registerControl" IsOpen="False" >
+                <StackPanel Orientation="Vertical" Background="#FF1212FF" Height="400" x:Name="registerPopup" Margin="0" >
+                    <StackPanel Margin="0,40,0,0">
+                        <TextBlock Text="Register for an Account"  HorizontalAlignment="Center" Foreground="White" FontSize="25" Style="{StaticResource SubheaderTextBlockStyle}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,50" HorizontalAlignment="Center">
+                        <TextBlock Text="Username" Foreground="White" FontSize="25" Style="{StaticResource BodyTextBlockStyle}" Margin="0,3" Width="114" />
+                        <TextBox x:Name="RegisterUsernameTextBox" IsSpellCheckEnabled="True"  Height="30" Margin="5,1,0,1" Width="400" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="Password" Foreground="White"  FontSize="25" Style="{StaticResource BodyTextBlockStyle}" Margin="0,3" />
+                        <PasswordBox  x:Name="RegisterPasswordTextBox"  IsPasswordRevealButtonEnabled="True" Height="30" Margin="25,1,0,1"  Width="400"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,50" HorizontalAlignment="Center">
+                        <Button x:Name="registerclick" Click="RegisterButton_Click" Foreground="White"   Width="100" Content="Login" Background="#FF0A0AC1"></Button>
+                        <Button x:Name="registercancel" Click="RegisterCancelButton_Click"   Foreground="White"  Width="100" Content="Cancel" Background="#FF0A0AC1"></Button>
+                    </StackPanel>
+                </StackPanel>
+            </Popup>
+        </ContentControl>
+    </StackPanel>
+</Page>

@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <RemoteDebugMachine>student512</RemoteDebugMachine>
+    <UseAuthentication>False</UseAuthentication>
+    <RemoteDebugEnabled>true</RemoteDebugEnabled>
+    <UseSimulator>False</UseSimulator>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ReferencePath>C:\Users\christopher\Documents\Visual Studio 2013\Projects\TableTopTablet\TableTopTablet\FTP\;C:\Users\christopher\Documents\Visual Studio 2013\Projects\TableTopTablet\TableTopTablet\DataModel\</ReferencePath>
+    <ProjectView>ShowAllFiles</ProjectView>
+  </PropertyGroup>
+</Project>
