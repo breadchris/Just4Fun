@@ -1,6 +1,7 @@
 from set2_common import *
 from Crypto.Cipher import AES
 from random import randint
+from chal12 import decrypt_block
 import string
 
 secret = """Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
@@ -9,14 +10,14 @@ dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
 YnkK""".replace("\n", "").decode("base64")
 
 key = ""
-random_bytes = "".join([chr(randint(0, 255)) for _ in range(randint(0, 150))])
+random_bytes = "".join([chr(randint(0, 255)) for _ in range(randint(4, 5))])
 
-def aes_encrypt(data):
+def aes_encrypt_chal14(data):
     global key, random_bytes
 
     cipher = AES.new(key, AES.MODE_ECB)
     plaintext = pkcs7_padding(random_bytes + data + secret, len(key))
-    print break_into_blocks(plaintext, len(key))
+    #print break_into_blocks(plaintext, len(key))
 
     encrypt = cipher.encrypt(plaintext)
     return encrypt
@@ -30,7 +31,7 @@ padding plaintext to an encrypted block.
 
 def decrypt_secret(block_size):
     find_block = "A" * block_size * 3
-    enc = aes_encrypt(find_block)
+    enc = aes_encrypt_chal14(find_block)
     search_block = similar_blocks(enc)[0]
 
     print "[+] Found search block:", repr(search_block)
@@ -45,10 +46,10 @@ def decrypt_secret(block_size):
 
 def find_pad(block_size):
     init_pad = ""
-    enc_length = len(aes_encrypt(init_pad))
+    enc_length = len(aes_encrypt_chal14(init_pad))
     pad_length = 0
-    for pad in range(block_size):
-        if enc_length != len(aes_encrypt(init_pad + "A" * pad)):
+    for pad in range(block_size * 2):
+        if enc_length != len(aes_encrypt_chal14(init_pad + "A" * pad)):
             init_pad += "A" * (pad - 1)
             break
 
@@ -56,30 +57,36 @@ def find_pad(block_size):
 
 def decrypt_secret(block_size):
     init_pad = find_pad(block_size)
-    enc = aes_encrypt("A" * block_size * 3)
-    search_block = similar_blocks(enc, block_size)
+    enc = aes_encrypt_chal14("A" * block_size * 3)
+    search_block = similar_blocks(enc, block_size)[0]
     offset = enc.find(search_block)
+    replace_pad = ""
+    secret_size = len(enc) - offset
 
-    secret = ""
-    for pad in range(block_size):
-        cur_pad = init_pad + "A" * pad
-        lookup = []
-        for c in string.printable:
-            test_pad = cur_pad + pkcs7_padding(secret + c)
-            enc_block = aes_encrypt(test_pad)[offset:offset+block_size]
-            lookup.append((enc_block, c))
-        enc = aes_encrypt(init_pad)
+    for i in range(block_size * 2):
+        test = init_pad + "A" * i
+        enc_test = aes_encrypt_chal14(test)
+        if search_block in enc_test:
+            replace_pad = test[:len(test) - block_size]
+            break
 
+    decrypt_secret = ""
+    for block_off in range(0, secret_size, block_size):
+        decrypt_secret = decrypt_block(
+            block_size, offset + block_off, decrypt_secret,
+            aes_encrypt_chal14, replace_pad)
+
+    return decrypt_secret
 
 def challenge_12():
     global key
 
     key = gen_aes_key()
-    if not detect_ecb(aes_encrypt):
+    if not detect_ecb(aes_encrypt_chal14):
         print "[-] Error: Cipher not ECB"
         return
 
-    block_size = find_block_size(aes_encrypt)
+    block_size = find_block_size(aes_encrypt_chal14)
     if block_size == -1:
         print "[-] Error: Unable to determine block size"
         return

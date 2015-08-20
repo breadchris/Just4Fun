@@ -17,21 +17,21 @@ def aes_encrypt(data):
     plaintext = pkcs7_padding(data + secret, len(key))
     return cipher.encrypt(plaintext)
 
-def decrypt_block(block_size, off=0, secret_part=""):
+def decrypt_block(block_size, off=0, secret_part="", cipher=aes_encrypt, bp=""):
     decrypt_out = secret_part
     for pad in range(block_size)[::-1]:
-        base_pad = pad * "A"
+        base_pad = bp + pad * "A"
         base = base_pad + decrypt_out + "{0}"
         lookup = []
         tmp = []
         for c in range(255):
             to_encrypt = base.format(chr(c))
-            enc = aes_encrypt(to_encrypt)
-            lookup.append((enc, chr(c)))
-        enc = aes_encrypt(base_pad)
+            enc = cipher(to_encrypt)
+            lookup.append((enc[off:off+block_size], chr(c)))
+        enc = cipher(base_pad)
+        find_block = enc[off:off+block_size]
         for t in lookup:
-            compare = zip(t[0][off:off+block_size], enc[off:off+block_size])
-            if all([x == y for x, y in compare]):
+            if t[0] == find_block:
                 decrypt_out += t[1]
                 break
     return decrypt_out
