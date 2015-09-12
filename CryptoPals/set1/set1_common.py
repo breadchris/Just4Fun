@@ -1,10 +1,6 @@
-import string
-
-input = raw_input
-
 MIN_KEYSIZE = 2
 MAX_KEYSIZE = 40
-KEYSIZE_BLOCKS = 4
+KEYSIZE_BLOCKS = 16
 letterFreq = [0.0816, 0.01492, 0.02782, 0.04253, 0.12702, 0.02228, 0.02015,
               0.06094, 0.06966, 0.00153, 0.00772, 0.04025, 0.02406, 0.06749,
               0.07507, 0.01929, 0.00095, 0.05987, 0.06326, 0.09055, 0.02758,
@@ -21,15 +17,16 @@ def edit_distance(text, size):
     return total_sum
 
 def score_text(text):
-    #print len(text) - len([c for c in text if c in string.printable])
     deltas_sum = 0
+    freq_lookup = {chr(c):0 for c in range(ord("A"), ord("Z") + 1)}
     for x in text.upper():
         if x.isalpha():
-            deltas_sum += abs(float(text.count(x)) / float(len(text)) - letterFreq[ord(x) - ord("A")])
-        elif x == " ":
-            deltas_sum += 1
-        else:
-            deltas_sum += 5
+            freq_lookup[x] += 1
+        elif x not in " '\"":
+            deltas_sum += 0.05
+
+    for c in freq_lookup:
+        deltas_sum += abs((freq_lookup[c] / float(len(text))) - letterFreq[ord(c) - ord("A")])
     return deltas_sum
 
 def single_byte_decrypt(encrypted_text):
@@ -40,4 +37,3 @@ def single_byte_decrypt(encrypted_text):
         if not sscore or (score != -1 and score < sscore):
             (sscore, skey) = (score, key)
     return sscore, skey
-

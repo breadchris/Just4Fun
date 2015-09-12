@@ -76,7 +76,7 @@ def decrypt_secret(block_size):
             block_size, offset + block_off, decrypt_secret,
             aes_encrypt_chal14, replace_pad)
 
-    return decrypt_secret
+    return pkcs7_unpad(decrypt_secret, block_size)
 
 def challenge_12():
     global key
@@ -92,7 +92,11 @@ def challenge_12():
         return
 
     print "[+] Found block size:", block_size
-    print decrypt_secret(block_size)
+
+    decrypted_msg = decrypt_secret(block_size)
+
+    assert decrypted_msg == secret
+    print decrypted_msg
 
 if __name__ == "__main__":
     challenge_12()

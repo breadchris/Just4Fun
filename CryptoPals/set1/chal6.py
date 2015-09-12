@@ -12,19 +12,20 @@ def get_key_size(text):
 
 def challenge_6(data):
     key_size = get_key_size(data)
-    blocks = [""] * key_size
+    blocks = ["" for _ in range(key_size)]
     for n, x in enumerate(data):
         blocks[n % key_size] += x
-    
-    key = [None] * key_size
-    for n, block in enumerate(blocks):
-        key[n] = chr(single_byte_decrypt(block)[1])
-    print "".join(key)
 
-    return keyed_xor(data, "".join(key))
+    key = ""
+    for n, block in enumerate(blocks):
+        score, key_char = single_byte_decrypt(block)
+        key += chr(key_char)
+    print "[+] Found the key:", key
+
+    return keyed_xor(data, key)
 
 if __name__ == "__main__":
-    with open("in.txt", "r") as f:
-        data = f.read().replace("\n", "").decode("hex")#.decode("base64")
-        print "[+] Output: %s" % challenge_6(data)
+    with open("6.txt", "r") as f:
+        data = f.read().replace("\n", "").decode("base64")
+        print "[+] Output:", challenge_6(data)
 

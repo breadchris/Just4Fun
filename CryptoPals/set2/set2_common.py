@@ -11,16 +11,15 @@ class PKCS7PaddingError(Exception):
 def pkcs7_padding(text, block_size=16):
     pad = len(text) % block_size
     if pad == 0:
-        return text
+        return text + chr(block_size) * block_size
     pad = block_size - pad
     return text + (chr(pad) * pad)
 
 def pkcs7_unpad(text, block_size=16):
     pad = ord(text[-1])
-    if pad >= block_size:
-        return text
+    if pad > block_size:
+        raise PKCS7PaddingError("Given padding is not valid", text)
 
-    # validate padding
     pad_chars = text[-pad:]
     if (len(pad_chars) == 1 and ord(pad_chars[0]) == 0x01) or \
         all([pad_chars[0] == c for c in pad_chars[1:]]):

@@ -24,7 +24,7 @@ public class TestingMethods {
     private static void httpAuth() {
         try {
             URL url = new URL ("http://172.26.13.25/now.jpg");
-            byte[] encoding = Base64.encodeBase64("root:mcps246".getBytes());
+            byte[] encoding = Base64.encodeBase64("root:****246".getBytes());
             String encodingString = new String(encoding);
 
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();

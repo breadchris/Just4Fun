@@ -1,14 +1,17 @@
 from set1_common import *
+import string
 
 def challenge_4(encrypted_lines):
-    lline = ""
-    lscore = 100000
+    hline = ""
+    hscore = 0
     for line in encrypted_lines:
-        score, key = single_byte_decrypt(line.strip().decode("hex"))
-        if score < lscore:
-            (lscore, lline) = (score, keyed_xor(line, key))
-    return lline
+        line = line.strip().decode("hex")
+        score, key= single_byte_decrypt(line)
+
+        if hscore == 0 or (score != 0 and score < hscore):
+            (hscore, hline) = (score, keyed_xor(line, chr(key)))
+    return hline
 
 if __name__ == "__main__":
     with open("4.txt", "r") as f:
-        print "[+] Output: %s" % challenge_4(f)
+        print "[+] Output: %s" % repr(challenge_4(f))
