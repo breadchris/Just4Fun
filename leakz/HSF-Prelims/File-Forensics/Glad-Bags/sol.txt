@@ -1,0 +1,24 @@
+file GLAD.doc
+mv GLAD.doc GLAD.zip
+unzip GLAD.zip
+cd pptx
+ls -al
+cd .secret
+ls -al
+file *
+extract narnia.cab
+cd narnia
+file *
+mv skinking.wmv tmp.zip
+unzip tmp.zip
+cd tmp
+ls -al
+file *
+mv Doom doom.lha
+mkdir tmp
+cp doom.lha tmp
+cd tmp
+unzip tmp
+cd word
+cd media
+open flag.png

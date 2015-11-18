@@ -1,0 +1,20 @@
+HSF 2015: File Signature Challenge
+
+Challenge Name: Abracadabra
+Points: 150-200
+
+SETUP:
+- Populate slow.txt, wrong.txt and right.txt with feedback for the user. If not populated, default messages will be used for each.
+- Populate flag.txt with the flag
+- sigs.out needs to be in the same folder as chal.py
+- In chal.py, set the TIME_LIMIT and THRESHOLD for the time to give the user and the number they need to get correct to solve.
+
+RUNNING INSTRUCTIONS:
+- Set the port and run the following command:
+# socat TCP-LISTEN:{PORT},fork EXEC:./chal.py,pty,stderr,echo=0
+- Example:
+# socat TCP-LISTEN:45454,fork EXEC:./chal.py,pty,stderr,echo=0
+
+SOLUTION:
+- Send the appropriate magic number for each file type that is presented. The list is based off of Gary Kesslers downloadable file signature list.
+- Example solution in sol.py

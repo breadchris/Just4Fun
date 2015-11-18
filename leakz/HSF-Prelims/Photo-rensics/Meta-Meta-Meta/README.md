@@ -1,0 +1,2 @@
+- Send the appropriate value for the specific iamge for each exif tag that is presented.
+- Example solution in sol.py

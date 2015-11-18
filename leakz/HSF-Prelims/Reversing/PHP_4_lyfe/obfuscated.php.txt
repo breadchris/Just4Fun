@@ -1,0 +1,2 @@
+20 steps are needed
+flag{haha_0bfusc4ted_phpis_kind_of_hard_t0_re4d}

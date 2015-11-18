@@ -1,0 +1,23 @@
+Challenge: OTP_go
+Category: Steganography ~ish 
+
+File summary
+-------------------------------------
+/recv, /send - directories containing images with embedded data
+conversation.txt - conversation that is embedded into recv files and send files. Can be modified if needed (images can be regenerated)
+key.txt - Txt file with an ADS containing the file key (to be stored in key.zip)
+key.zip - Encrypted zip containing key.txt
+mod.py - Python code to encode, decode images (requires pyexiv2)
+server_log_dump.txt - Server log dump showing one box's requests to receive/send data
+
+Walkthrough
+-------------------------------------
+Images contain base64 + hex encoded "UserComment" tags in EXIF data. A message is sent/received using 2 images, the xor of the two UserComment tags provides the actual message (a la One Time Pad). 
+A long conversation needs to be decoded, requiring a Python script (if this is too much, we can shorten the conversation to make it manually solveable). Need for xor hinted in challenge name (OTP_go). 
+A server log is provided to demonstrate communication pattern (2 GETs & 2 PUTs).
+key.zip is encrypted with "d0nT_p@n1C!", password retrieved from deciphering the image conversation.
+key.txt has an ADS file stored in it, hinted by the file contents (windows ads).
+	ADS Filename: key.txt:hello!
+	FileContents: flag{d3ad_enD_fl@g_Doe5N0T_eXisT!}
+
+Fin.

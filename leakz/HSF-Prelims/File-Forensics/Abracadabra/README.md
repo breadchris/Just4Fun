@@ -1,0 +1,2 @@
+- Send the appropriate magic number for each file type that is presented. The list is based off of Gary Kesslers downloadable file signature list.
+- Example solution in sol.py
