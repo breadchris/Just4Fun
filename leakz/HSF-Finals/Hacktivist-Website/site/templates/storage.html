@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h1>Storage stuff</h1>
+<h3>Welcome, {{ username }}</h3>
+
+    <div class="well">
+    {% for item in tree %}
+        <li><a href="/static/storage/{{ item }}">{{ item }}</a></li>
+    {% endfor %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% endblock %}

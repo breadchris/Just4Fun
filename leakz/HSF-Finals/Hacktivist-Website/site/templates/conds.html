@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block style %}
+<link href="/static/css/prism.css" rel="stylesheet" type="text/css" />
+<style>
+* {
+    font-size: 200px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<pre class="language-python" rel="css">
+    <code class="language-python" id="stuff"></code>
+</pre>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$.get("/conditionals", function(data) {
+    $("#stuff").text(data);
+    Prism.highlightAll();
+})
+</script>
+<script src="/static/js/prism.js"></script>
+{% endblock %}

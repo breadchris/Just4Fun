@@ -1,0 +1,11 @@
+su -
+cat /data/system/gesture.key
+
+shell@falcon_cdma:/ $ su -
+cat /data/system/gesture.key
+
+cat /data/system/gesture.key
+
+root@falcon_cdma:/ # cat /data/system/gesture.key
+Äù05³­v¼úTşÉ"r€î½¸-root@falcon_cdma:/ # 
+root@falcon_cdma:/ # 
