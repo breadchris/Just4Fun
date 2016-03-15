@@ -1,1 +1,0 @@
-flag{are_you_secretly_a_ninja?}

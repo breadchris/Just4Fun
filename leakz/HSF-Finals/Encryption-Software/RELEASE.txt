@@ -1,6 +1,0 @@
-Notes
------
-
-1) People have said that our encryption is not that great, but we can ensure that our product is as vulnerability free as Bash.
-2) When did raspberry pis start having x86 processors? Oh well, I guess we are going to compile for x86 instead of ARM.
-

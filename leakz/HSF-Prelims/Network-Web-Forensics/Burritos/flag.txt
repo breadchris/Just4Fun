@@ -1,1 +1,0 @@
-flag{NYC_has_dank_burritos}

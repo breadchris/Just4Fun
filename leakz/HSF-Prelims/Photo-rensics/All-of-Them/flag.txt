@@ -1,1 +1,0 @@
-flag{f1nd_and_r3plac3}

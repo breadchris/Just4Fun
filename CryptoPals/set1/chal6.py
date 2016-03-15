@@ -20,12 +20,12 @@ def challenge_6(data):
     for n, block in enumerate(blocks):
         score, key_char = single_byte_decrypt(block)
         key += chr(key_char)
-    print "[+] Found the key:", key
+    print "[+] Found the key:", repr(key)
 
     return keyed_xor(data, key)
 
 if __name__ == "__main__":
-    with open("6.txt", "r") as f:
-        data = f.read().replace("\n", "").decode("base64")
+    with open("AncientSecretsOfTheKamaSutra.txt", "r") as f:
+        data = f.read()
         print "[+] Output:", challenge_6(data)
 

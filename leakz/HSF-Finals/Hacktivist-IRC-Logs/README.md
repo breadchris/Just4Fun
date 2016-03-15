@@ -1,1 +1,0 @@
-# Hacktivist IRC logs

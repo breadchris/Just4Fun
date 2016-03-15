@@ -10,5 +10,5 @@ def answer(x):
             no_overlap.append(higher_time)
     return sum([time2 - time1 for time1, time2 in no_overlap])
 
-print answer([[1, 3], [3, 6]])
+print answer([[1, 3], [1, 2], [3, 6]])
 print answer([[10, 14], [4, 18], [19, 20], [19, 20], [13, 20], [13, 20]])

@@ -1,1 +1,0 @@
-flag{h/-\sh_it_out}

@@ -1,5 +1,0 @@
-Challenge Name: OTP Go
-
-Description: 
-
-Hint: 

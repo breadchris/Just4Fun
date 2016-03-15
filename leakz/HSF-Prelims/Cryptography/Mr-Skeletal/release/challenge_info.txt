@@ -1,5 +1,0 @@
-Challenge Name: Mr Skeletal
-
-Description: 
-
-Hint: cat doot.doooot | say -v "Cellos"
